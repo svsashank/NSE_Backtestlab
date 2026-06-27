@@ -78,6 +78,7 @@ def run_backtest(ind, config, rebalance_dates, initial_capital,
     min_stocks_to_invest = config.get('min_stocks_to_invest', portfolio_size)
     retention_rank       = config.get('retention_rank', 0)
     risk_free_rate       = config.get('risk_free_rate', 0.0)
+    no_trim              = config.get('no_trim', False)   # if True, winners are never trimmed back to equal weight
 
     daily_cash_return = (1 + risk_free_rate / 100) ** (1 / 252) - 1
 
@@ -172,18 +173,20 @@ def run_backtest(ind, config, rebalance_dates, initial_capital,
             value_per_slot = portfolio_value / portfolio_size
 
             # Trim overweight existing positions back to value_per_slot
-            for ticker in [t for t in target if t in holdings]:
-                p = price_row.get(ticker, np.nan)
-                if pd.isna(p):
-                    continue
-                excess = holdings[ticker]['shares'] * p - value_per_slot
-                if excess > p:
-                    trim = int(excess / p)
-                    if trim > 0:
-                        capital += trim * p * (1 - cost_sell)
-                        holdings[ticker]['shares'] -= trim
-                        trade_log.append({'date': rebal_date, 'ticker': ticker,
-                                           'action': 'TRIM', 'price': p, 'shares': trim})
+            # Skipped when config['no_trim'] = True — winners run freely until exit
+            if not no_trim:
+                for ticker in [t for t in target if t in holdings]:
+                    p = price_row.get(ticker, np.nan)
+                    if pd.isna(p):
+                        continue
+                    excess = holdings[ticker]['shares'] * p - value_per_slot
+                    if excess > p:
+                        trim = int(excess / p)
+                        if trim > 0:
+                            capital += trim * p * (1 - cost_sell)
+                            holdings[ticker]['shares'] -= trim
+                            trade_log.append({'date': rebal_date, 'ticker': ticker,
+                                               'action': 'TRIM', 'price': p, 'shares': trim})
 
             # Buy new entrants
             for ticker in [t for t in target if t not in holdings]:
