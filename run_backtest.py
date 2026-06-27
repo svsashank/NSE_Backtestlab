@@ -104,13 +104,23 @@ def main():
     config["rank_fn"] = strategy.rank_fn       # inject callable — not serialisable
 
     # Allow GUI to override numeric params (on top of strategy overrides)
-    int_keys = ["portfolio_size", "sma_short", "sma_long", "min_stocks_to_invest", "retention_rank"]
+    int_keys  = ["portfolio_size", "sma_short", "sma_long", "min_stocks_to_invest", "retention_rank"]
+    bool_keys = ["no_trim"]
     skip_keys = {"strategy_id", "rebalance_type", "initial_capital", "start_date", "end_date"}
     for k, v in params.items():
         if k in skip_keys or v is None or v == "":
             continue
         if k in config and k not in ("rank_fn", "skip_filters", "anchors"):
-            config[k] = int(v) if k in int_keys else float(v)
+            if k in bool_keys:
+                config[k] = bool(v) if isinstance(v, bool) else str(v).lower() == "true"
+            elif k in int_keys:
+                config[k] = int(v)
+            else:
+                config[k] = float(v)
+    # Always pass no_trim even if not in base config
+    if "no_trim" in params:
+        v = params["no_trim"]
+        config["no_trim"] = bool(v) if isinstance(v, bool) else str(v).lower() == "true"
 
     # ── Load OHLCV history ────────────────────────────────────────────────────
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -165,7 +175,7 @@ def main():
         "date_range_end"  : str(bt_end.date()),
         "initial_capital" : initial_capital,
         "params"          : {k: clean(v) for k, v in config.items()
-                             if not k.startswith("_") and k != "rank_fn" and not callable(v)},
+                             if not k.startswith("_") and k not in ("rank_fn",) and not callable(v)},
         "performance"     : {k: clean(v) for k, v in stats.items()},
         "equity_curve"    : df_to_records(portfolio_df.reset_index().rename(columns={"index": "date"})),
         "trades"          : df_to_records(trades_df),
