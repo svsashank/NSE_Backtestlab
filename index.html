@@ -122,6 +122,16 @@
   .clear-btn { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
   .clear-btn:hover { border-color: var(--red); color: var(--red); }
 
+  .toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
+  .toggle-label { font-size: 12px; color: var(--muted); font-weight: 500; line-height: 1.4; }
+  .toggle-label small { display: block; font-size: 11px; color: #475569; margin-top: 2px; }
+  .toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider { position: absolute; inset: 0; background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; cursor: pointer; transition: 0.2s; }
+  .toggle-slider:before { content: ''; position: absolute; height: 14px; width: 14px; left: 2px; bottom: 2px; background: var(--muted); border-radius: 50%; transition: 0.2s; }
+  .toggle input:checked + .toggle-slider { background: var(--accent); border-color: var(--accent); }
+  .toggle input:checked + .toggle-slider:before { transform: translateX(16px); background: white; }
+
   ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
@@ -176,6 +186,16 @@
       <div class="form-group">
         <label>Initial Capital (₹)</label>
         <input type="number" id="capital" value="1000000" step="100000">
+      </div>
+      <div class="toggle-row">
+        <div class="toggle-label">
+          No Trim
+          <small>Winners run freely; no equal-weight rebalancing</small>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="no_trim">
+          <span class="toggle-slider"></span>
+        </label>
       </div>
     </div>
 
@@ -341,6 +361,7 @@ function renderRuns(runs) {
           <div class="run-meta">
             <span>${r.date_range_start} → ${r.date_range_end || 'latest'}</span>
             <span>₹${Number(r.initial_capital||0).toLocaleString()}</span>
+            <span>${r.params?.no_trim ? '✂️ no-trim' : '⚖️ trimmed'}</span>
             <span style="color:var(--muted)">${new Date(r.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</span>
           </div>
         </div>
@@ -553,12 +574,14 @@ async function triggerBacktest() {
   const pat = document.getElementById('pat_input').value.trim();
   if (!pat) { alert('Enter your GitHub PAT first'); return; }
 
+  const noTrim = document.getElementById('no_trim').checked;
   const params = {
     strategy_id:    selectedStrategy,
     rebalance_type: document.getElementById('rebalance').value,
     initial_capital: Number(document.getElementById('capital').value),
     start_date:     document.getElementById('start_date').value || null,
     end_date:       document.getElementById('end_date').value   || null,
+    no_trim:        noTrim,
   };
 
   const btn = document.getElementById('run_btn');
