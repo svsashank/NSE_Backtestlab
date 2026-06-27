@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NSE Backtest Lab</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+    --border: #2e3250; --accent: #6366f1; --accent2: #22d3ee;
+    --green: #10b981; --red: #ef4444; --yellow: #f59e0b;
+    --text: #e2e8f0; --muted: #64748b; --card: #1e2235;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
+
+  /* ── Header ── */
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
+  .header h1 { font-size: 18px; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .header .subtitle { color: var(--muted); font-size: 12px; }
+
+  /* ── Layout ── */
+  .main { display: grid; grid-template-columns: 320px 1fr; gap: 0; height: calc(100vh - 57px); }
+
+  /* ── Left Panel ── */
+  .left-panel { background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 20px; }
+  .section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 12px; }
+
+  /* Form Controls */
+  .form-group { margin-bottom: 14px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
+  select, input { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 8px 12px; font-size: 13px; outline: none; transition: border-color 0.2s; }
+  select:focus, input:focus { border-color: var(--accent); }
+  select option { background: var(--surface2); }
+
+  .strategy-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; cursor: pointer; transition: all 0.2s; margin-bottom: 8px; }
+  .strategy-card:hover { border-color: var(--accent); }
+  .strategy-card.active { border-color: var(--accent); background: rgba(99,102,241,0.1); }
+  .strategy-card .s-name { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  .strategy-card .s-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
+  .strategy-card .s-tag { display: inline-block; background: rgba(99,102,241,0.15); color: var(--accent); font-size: 10px; padding: 2px 7px; border-radius: 4px; margin-top: 6px; font-weight: 600; }
+
+  .run-btn { width: 100%; padding: 12px; background: var(--accent); color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .run-btn:hover { background: #4f46e5; transform: translateY(-1px); }
+  .run-btn:disabled { background: var(--muted); cursor: not-allowed; transform: none; opacity: 0.6; }
+  .run-btn.running { background: var(--yellow); color: #000; }
+
+  .status-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 12px; line-height: 1.6; }
+  .status-box .s-row { display: flex; justify-content: space-between; align-items: center; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 5px; font-size: 11px; font-weight: 600; }
+  .badge.running { background: rgba(245,158,11,0.15); color: var(--yellow); }
+  .badge.success { background: rgba(16,185,129,0.15); color: var(--green); }
+  .badge.failed { background: rgba(239,68,68,0.15); color: var(--red); }
+  .badge.idle { background: var(--surface); color: var(--muted); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .dot.pulse { animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+
+  /* ── Right Panel ── */
+  .right-panel { overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+  .tab { padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.2s; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Results table */
+  .results-grid { display: flex; flex-direction: column; gap: 12px; }
+  .run-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: border-color 0.2s; }
+  .run-card:hover { border-color: var(--accent); }
+  .run-card.selected { border-color: var(--accent); }
+  .run-header { padding: 14px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer; }
+  .run-header .rh-left { flex: 1; }
+  .run-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .run-meta { font-size: 11px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+  .stat-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .chip { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 12px; }
+  .chip .cv { font-weight: 700; }
+  .chip.pos .cv { color: var(--green); }
+  .chip.neg .cv { color: var(--red); }
+  .chip.neu .cv { color: var(--accent2); }
+
+  .expand-btn { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 4px 10px; font-size: 11px; cursor: pointer; transition: all 0.2s; }
+  .expand-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .run-detail { padding: 0 16px 16px; border-top: 1px solid var(--border); margin-top: 0; display: none; }
+  .run-detail.open { display: block; }
+  .chart-wrap { height: 220px; margin: 16px 0 8px; position: relative; }
+
+  /* Compare bar */
+  .compare-bar { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .compare-bar .cb-title { font-weight: 600; font-size: 13px; flex: 1; }
+  .compare-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .compare-table th { background: var(--surface2); padding: 8px 12px; text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .compare-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .compare-table tr:last-child td { border-bottom: none; }
+  .compare-table tr:hover td { background: rgba(99,102,241,0.05); }
+
+  .empty-state { text-align: center; color: var(--muted); padding: 60px 20px; }
+  .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-state p { font-size: 13px; line-height: 1.6; }
+
+  /* Trades table */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .data-table th { background: var(--surface2); padding: 7px 10px; text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; position: sticky; top: 0; }
+  .data-table td { padding: 6px 10px; border-bottom: 1px solid rgba(46,50,80,0.5); }
+  .data-table tr:hover td { background: rgba(99,102,241,0.04); }
+  .buy { color: var(--green); font-weight: 600; }
+  .sell { color: var(--red); font-weight: 600; }
+  .trim { color: var(--yellow); font-weight: 600; }
+
+  .table-wrap { max-height: 300px; overflow-y: auto; border-radius: 8px; border: 1px solid var(--border); }
+
+  /* Compare chart */
+  .compare-chart-wrap { height: 300px; position: relative; }
+
+  .divider { height: 1px; background: var(--border); }
+  .flex-row { display: flex; gap: 12px; align-items: center; }
+  .clear-btn { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
+  .clear-btn:hover { border-color: var(--red); color: var(--red); }
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>⚗️ NSE Backtest Lab</h1>
+    <div class="subtitle">Strategy research on NSE 2365-stock universe · Supabase + GitHub Actions</div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- ── LEFT PANEL ── -->
+  <div class="left-panel">
+
+    <div>
+      <div class="section-title">Strategy</div>
+      <div class="strategy-card active" data-id="s01_sma_momentum" onclick="selectStrategy(this)">
+        <div class="s-name">SMA Momentum</div>
+        <div class="s-desc">All 7 filters active. Ranked by SMA21/SMA200 ratio — rewards stocks in strong uptrends.</div>
+        <span class="s-tag">Baseline</span>
+      </div>
+      <div class="strategy-card" data-id="s02_rsi_composite" onclick="selectStrategy(this)">
+        <div class="s-name">RSI Composite</div>
+        <div class="s-desc">RSI&gt;50 filter removed. Ranked by avg(RSI₁₄, RSI₂₂, RSI₇₂) — multi-timeframe momentum strength.</div>
+        <span class="s-tag">New</span>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">Parameters</div>
+      <div class="form-group">
+        <label>Rebalance Frequency</label>
+        <select id="rebalance">
+          <option value="monthly">Monthly</option>
+          <option value="weekly">Weekly</option>
+          <option value="quarterly">Quarterly</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Start Date</label>
+        <input type="date" id="start_date" value="2019-01-01">
+      </div>
+      <div class="form-group">
+        <label>End Date</label>
+        <input type="date" id="end_date" value="">
+      </div>
+      <div class="form-group">
+        <label>Initial Capital (₹)</label>
+        <input type="number" id="capital" value="1000000" step="100000">
+      </div>
+    </div>
+
+    <div>
+      <div class="section-title">GitHub Auth</div>
+      <div class="form-group">
+        <label>Personal Access Token (repo scope)</label>
+        <input type="password" id="pat_input" placeholder="ghp_...">
+      </div>
+    </div>
+
+    <button class="run-btn" id="run_btn" onclick="triggerBacktest()">
+      <span id="run_icon">▶</span>
+      <span id="run_label">Run Backtest</span>
+    </button>
+
+    <div class="status-box" id="status_box">
+      <div class="s-row">
+        <span style="color:var(--muted);font-size:12px;">Status</span>
+        <span class="badge idle" id="status_badge"><span class="dot"></span> Idle</span>
+      </div>
+      <div id="status_msg" style="color:var(--muted);font-size:11px;margin-top:8px;"></div>
+    </div>
+
+  </div>
+
+  <!-- ── RIGHT PANEL ── -->
+  <div class="right-panel">
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('results', this)">Results</div>
+      <div class="tab" onclick="switchTab('compare', this)">Compare</div>
+    </div>
+
+    <!-- RESULTS TAB -->
+    <div class="tab-content active" id="tab-results">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+        <div style="font-size:13px;color:var(--muted)" id="results_meta">Loading runs...</div>
+        <button class="expand-btn" onclick="loadRuns()">↻ Refresh</button>
+      </div>
+      <div class="results-grid" id="results_grid">
+        <div class="empty-state"><div class="icon">📊</div><p>Loading backtest results...</p></div>
+      </div>
+    </div>
+
+    <!-- COMPARE TAB -->
+    <div class="tab-content" id="tab-compare">
+      <div class="compare-bar">
+        <span class="cb-title">Select runs to compare</span>
+        <button class="clear-btn" onclick="clearCompare()">✕ Clear</button>
+      </div>
+      <div id="compare_hint" style="color:var(--muted);font-size:12px;padding:12px 0;">
+        Tick the checkbox on any result card to add it to comparison (up to 4 runs).
+      </div>
+      <div id="compare_content" style="display:none;">
+        <div class="compare-chart-wrap" style="margin:16px 0;">
+          <canvas id="compareChart"></canvas>
+        </div>
+        <div class="table-wrap" style="margin-top:12px;">
+          <table class="compare-table">
+            <thead id="compare_thead"></thead>
+            <tbody id="compare_tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://ckvdwqzuklpvbpvqnmyu.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrdmR3cXp1a2xwdmJwdnFubXl1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExNjU3NTMsImV4cCI6MjA5Njc0MTc1M30.MQ4y1iUgMUwRBYNQrmndode-6T9o92AyJcQJsH8rkWo';
+const GH_REPO     = 'svsashank/NSE_Backtestlab';
+const GH_WORKFLOW = 'run_backtest.yml';
+
+const PALETTE = ['#6366f1','#22d3ee','#10b981','#f59e0b','#ef4444','#a78bfa'];
+
+const STRATEGIES = {
+  s01_sma_momentum:  { name: 'SMA Momentum',   color: '#6366f1' },
+  s02_rsi_composite: { name: 'RSI Composite',  color: '#22d3ee' },
+};
+
+let selectedStrategy = 's01_sma_momentum';
+let pollTimer = null;
+let compareRuns = [];
+let compareChart = null;
+let allRuns = [];
+
+// ── Strategy select ───────────────────────────────────────────────────────────
+function selectStrategy(el) {
+  document.querySelectorAll('.strategy-card').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  selectedStrategy = el.dataset.id;
+}
+
+// ── Tab switch ────────────────────────────────────────────────────────────────
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'compare') renderCompare();
+}
+
+// ── Supabase fetch ────────────────────────────────────────────────────────────
+async function sbFetch(path, params = '') {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}${params}`, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+  });
+  return r.json();
+}
+
+// ── Load runs ─────────────────────────────────────────────────────────────────
+async function loadRuns() {
+  document.getElementById('results_meta').textContent = 'Loading...';
+  try {
+    const data = await sbFetch('backtest_results',
+      '?select=id,created_at,strategy_id,strategy_name,rebalance_freq,date_range_start,date_range_end,initial_capital,performance,params&order=created_at.desc&limit=50');
+    allRuns = data;
+    document.getElementById('results_meta').textContent = `${data.length} run${data.length !== 1 ? 's' : ''} · click a card to expand`;
+    renderRuns(data);
+  } catch(e) {
+    document.getElementById('results_meta').textContent = 'Error loading runs';
+    document.getElementById('results_grid').innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><p>${e.message}</p></div>`;
+  }
+}
+
+function fmt(v, type) {
+  if (v == null || isNaN(v)) return '—';
+  if (type === 'pct') return (v * 100).toFixed(1) + '%';
+  if (type === 'x')   return (v + 1).toFixed(2) + 'x';
+  if (type === 'ratio') return v.toFixed(2);
+  if (type === 'cr')  return '₹' + (v / 1e5).toFixed(1) + 'L';
+  return v;
+}
+
+function renderRuns(runs) {
+  const grid = document.getElementById('results_grid');
+  if (!runs.length) {
+    grid.innerHTML = `<div class="empty-state"><div class="icon">🏃</div><p>No backtest runs yet.<br>Configure a strategy and click Run Backtest.</p></div>`;
+    return;
+  }
+  grid.innerHTML = runs.map((r, i) => {
+    const p = r.performance || {};
+    const strat = STRATEGIES[r.strategy_id] || { name: r.strategy_name || r.strategy_id, color: '#6366f1' };
+    const cagr = p.cagr != null ? (p.cagr * 100).toFixed(1) + '%' : '—';
+    const sharpe = p.sharpe != null ? p.sharpe.toFixed(2) : '—';
+    const dd = p.max_drawdown != null ? (p.max_drawdown * 100).toFixed(1) + '%' : '—';
+    const tr = p.total_return != null ? ((p.total_return + 1)).toFixed(2) + 'x' : '—';
+    const wins = p.win_rate != null ? (p.win_rate * 100).toFixed(0) + '%' : '—';
+    const cagrN = p.cagr || 0;
+    const checked = compareRuns.includes(r.id) ? 'checked' : '';
+    return `
+    <div class="run-card ${compareRuns.includes(r.id) ? 'selected' : ''}" id="card-${r.id}">
+      <div class="run-header" onclick="toggleDetail('${r.id}')">
+        <div class="rh-left">
+          <div class="run-title" style="color:${strat.color}">
+            ${strat.name}
+            <span style="color:var(--muted);font-weight:400;font-size:12px;margin-left:6px">${r.rebalance_freq}</span>
+          </div>
+          <div class="run-meta">
+            <span>${r.date_range_start} → ${r.date_range_end || 'latest'}</span>
+            <span>₹${Number(r.initial_capital||0).toLocaleString()}</span>
+            <span style="color:var(--muted)">${new Date(r.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+          <div class="stat-chips">
+            <div class="chip ${cagrN>0?'pos':'neg'}"><span class="cv">${cagr}</span> CAGR</div>
+            <div class="chip neu"><span class="cv">${tr}</span> return</div>
+            <div class="chip ${p.sharpe>1?'pos':''}"><span class="cv">${sharpe}</span> Sharpe</div>
+            <div class="chip neg"><span class="cv">${dd}</span> DD</div>
+            <div class="chip"><span class="cv">${wins}</span> win</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px;cursor:pointer" onclick="event.stopPropagation()">
+              <input type="checkbox" ${checked} onchange="toggleCompare('${r.id}',this.checked)" style="accent-color:var(--accent);width:14px;height:14px">
+              Compare
+            </label>
+            <button class="expand-btn" onclick="event.stopPropagation();toggleDetail('${r.id}')">▼ Detail</button>
+          </div>
+        </div>
+      </div>
+      <div class="run-detail" id="detail-${r.id}">
+        <div class="chart-wrap"><canvas id="chart-${r.id}"></canvas></div>
+        <div style="display:flex;gap:8px;margin:8px 0;flex-wrap:wrap" id="detail-meta-${r.id}">
+          <div class="chip"><span class="cv">${p.years?.toFixed(1) || '—'}y</span></div>
+          <div class="chip"><span class="cv">${fmt(p.ann_volatility,'pct')}</span> ann.vol</div>
+        </div>
+        <div class="section-title" style="margin-top:12px">Trade Log</div>
+        <div class="table-wrap" id="trades-${r.id}"><div style="padding:12px;color:var(--muted);font-size:12px">Click to load...</div></div>
+        <div style="text-align:center;margin-top:8px">
+          <button class="expand-btn" onclick="loadTrades('${r.id}')">Load Trades</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Toggle detail + draw chart ────────────────────────────────────────────────
+const openDetails = {};
+const detailCharts = {};
+
+async function toggleDetail(id) {
+  const det = document.getElementById(`detail-${id}`);
+  if (!det) return;
+  const isOpen = det.classList.contains('open');
+  det.classList.toggle('open');
+  if (!isOpen && !detailCharts[id]) {
+    // load equity curve
+    try {
+      const data = await sbFetch('backtest_results', `?select=equity_curve,strategy_id&id=eq.${id}`);
+      if (data[0]?.equity_curve) {
+        drawMiniChart(id, data[0].equity_curve, data[0].strategy_id);
+      }
+    } catch(e) {}
+  }
+}
+
+function drawMiniChart(id, curve, stratId) {
+  const ctx = document.getElementById(`chart-${id}`);
+  if (!ctx) return;
+  const strat = STRATEGIES[stratId] || { color: '#6366f1' };
+  const labels = curve.map(d => d.date);
+  const values = curve.map(d => d.value);
+  detailCharts[id] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        borderColor: strat.color,
+        backgroundColor: strat.color + '18',
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: true,
+        tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: {
+        callbacks: { label: ctx => '₹' + Number(ctx.parsed.y).toLocaleString() }
+      }},
+      scales: {
+        x: { ticks: { color: '#64748b', maxTicksLimit: 6, font: { size: 10 } }, grid: { color: '#2e3250' } },
+        y: { ticks: { color: '#64748b', font: { size: 10 }, callback: v => '₹' + (v/1e5).toFixed(0) + 'L' }, grid: { color: '#2e3250' } }
+      }
+    }
+  });
+}
+
+async function loadTrades(id) {
+  const wrap = document.getElementById(`trades-${id}`);
+  wrap.innerHTML = '<div style="padding:12px;color:var(--muted);font-size:12px">Loading...</div>';
+  try {
+    const data = await sbFetch('backtest_results', `?select=trades&id=eq.${id}`);
+    const trades = data[0]?.trades || [];
+    if (!trades.length) { wrap.innerHTML = '<div style="padding:12px;color:var(--muted)">No trades</div>'; return; }
+    wrap.innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>Date</th><th>Ticker</th><th>Action</th><th>Price</th><th>Shares</th></tr></thead>
+      <tbody>${trades.slice(0,200).map(t => `
+        <tr>
+          <td>${t.date || ''}</td>
+          <td>${t.ticker || ''}</td>
+          <td class="${(t.action||'').toLowerCase()}">${t.action || ''}</td>
+          <td>₹${Number(t.price||0).toFixed(1)}</td>
+          <td>${t.shares || ''}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  } catch(e) {
+    wrap.innerHTML = `<div style="padding:12px;color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
+// ── Compare ───────────────────────────────────────────────────────────────────
+function toggleCompare(id, checked) {
+  const card = document.getElementById(`card-${id}`);
+  if (checked) {
+    if (compareRuns.length >= 4) { alert('Max 4 runs for comparison'); return; }
+    if (!compareRuns.includes(id)) compareRuns.push(id);
+    card?.classList.add('selected');
+  } else {
+    compareRuns = compareRuns.filter(x => x !== id);
+    card?.classList.remove('selected');
+  }
+}
+
+function clearCompare() {
+  compareRuns = [];
+  document.querySelectorAll('.run-card').forEach(c => c.classList.remove('selected'));
+  document.querySelectorAll('input[type=checkbox]').forEach(c => c.checked = false);
+  document.getElementById('compare_content').style.display = 'none';
+  document.getElementById('compare_hint').style.display = 'block';
+}
+
+async function renderCompare() {
+  if (!compareRuns.length) {
+    document.getElementById('compare_content').style.display = 'none';
+    document.getElementById('compare_hint').style.display = 'block';
+    return;
+  }
+  document.getElementById('compare_hint').style.display = 'none';
+  document.getElementById('compare_content').style.display = 'block';
+
+  // Fetch full data for selected runs
+  const ids = compareRuns.map(id => `id=eq.${id}`).join(',');
+  // Supabase: use 'or' filter
+  const param = `?select=id,strategy_id,strategy_name,rebalance_freq,date_range_start,performance,equity_curve&or=(${compareRuns.map(id=>`id.eq.${id}`).join(',')})`;
+  const data = await sbFetch('backtest_results', param);
+
+  // Chart
+  if (compareChart) compareChart.destroy();
+  const ctx = document.getElementById('compareChart');
+  compareChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: data.map((r, i) => {
+        const strat = STRATEGIES[r.strategy_id] || { color: PALETTE[i] };
+        const label = `${STRATEGIES[r.strategy_id]?.name || r.strategy_id} (${r.rebalance_freq})`;
+        return {
+          label,
+          data: (r.equity_curve || []).map(d => ({ x: d.date, y: d.value })),
+          borderColor: PALETTE[i],
+          backgroundColor: PALETTE[i] + '10',
+          borderWidth: 2.5,
+          pointRadius: 0,
+          fill: false,
+          tension: 0.3
+        };
+      })
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'top', labels: { color: '#e2e8f0', font: { size: 11 }, boxWidth: 12 } },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ₹${Number(ctx.parsed.y).toLocaleString()}` }}
+      },
+      scales: {
+        x: { type: 'category', ticks: { color: '#64748b', maxTicksLimit: 8, font: { size: 10 } }, grid: { color: '#2e3250' } },
+        y: { ticks: { color: '#64748b', font: { size: 10 }, callback: v => '₹' + (v/1e5).toFixed(0) + 'L' }, grid: { color: '#2e3250' } }
+      }
+    }
+  });
+
+  // Comparison table
+  const metrics = [
+    { key: 'cagr',           label: 'CAGR',         fmt: v => (v*100).toFixed(1)+'%', better: 'high' },
+    { key: 'total_return',   label: 'Total Return',  fmt: v => ((v+1)).toFixed(2)+'x', better: 'high' },
+    { key: 'sharpe',         label: 'Sharpe',        fmt: v => v.toFixed(2),           better: 'high' },
+    { key: 'max_drawdown',   label: 'Max Drawdown',  fmt: v => (v*100).toFixed(1)+'%', better: 'low'  },
+    { key: 'ann_volatility', label: 'Ann. Volatility',fmt: v => (v*100).toFixed(1)+'%',better: 'low' },
+    { key: 'win_rate',       label: 'Win Rate',      fmt: v => (v*100).toFixed(1)+'%', better: 'high' },
+    { key: 'years',          label: 'Years',         fmt: v => v.toFixed(1),           better: null  },
+  ];
+
+  document.getElementById('compare_thead').innerHTML = `<tr><th>Metric</th>${data.map((r,i) => `<th style="color:${PALETTE[i]}">${STRATEGIES[r.strategy_id]?.name || r.strategy_id}<br><span style="font-weight:400;color:var(--muted)">${r.rebalance_freq} · ${r.date_range_start}</span></th>`).join('')}</tr>`;
+  document.getElementById('compare_tbody').innerHTML = metrics.map(m => {
+    const vals = data.map(r => r.performance?.[m.key]);
+    const bestIdx = m.better === 'high' ? vals.indexOf(Math.max(...vals.filter(v=>v!=null))) :
+                    m.better === 'low'  ? vals.indexOf(Math.min(...vals.filter(v=>v!=null))) : -1;
+    return `<tr>
+      <td style="color:var(--muted);font-weight:500">${m.label}</td>
+      ${vals.map((v,i) => `<td style="${i===bestIdx?'color:var(--green);font-weight:700':''}">${v!=null?m.fmt(v):'—'}</td>`).join('')}
+    </tr>`;
+  }).join('');
+}
+
+// ── Trigger backtest ──────────────────────────────────────────────────────────
+async function triggerBacktest() {
+  const pat = document.getElementById('pat_input').value.trim();
+  if (!pat) { alert('Enter your GitHub PAT first'); return; }
+
+  const params = {
+    strategy_id:    selectedStrategy,
+    rebalance_type: document.getElementById('rebalance').value,
+    initial_capital: Number(document.getElementById('capital').value),
+    start_date:     document.getElementById('start_date').value || null,
+    end_date:       document.getElementById('end_date').value   || null,
+  };
+
+  const btn = document.getElementById('run_btn');
+  btn.disabled = true;
+  btn.classList.add('running');
+  document.getElementById('run_label').textContent = 'Triggering...';
+  setStatus('running', 'Sending to GitHub Actions...');
+
+  try {
+    const resp = await fetch(
+      `https://api.github.com/repos/${GH_REPO}/actions/workflows/${GH_WORKFLOW}/dispatches`,
+      {
+        method: 'POST',
+        headers: { 'Authorization': `token ${pat}`, 'Content-Type': 'application/json', 'Accept': 'application/vnd.github.v3+json' },
+        body: JSON.stringify({ ref: 'main', inputs: { BT_PARAMS: JSON.stringify(JSON.stringify(params)) } })
+      }
+    );
+    if (resp.status === 204) {
+      setStatus('running', `✅ Triggered ${STRATEGIES[selectedStrategy]?.name || selectedStrategy}. Waiting for run to start...`);
+      document.getElementById('run_label').textContent = 'Running...';
+      await new Promise(r => setTimeout(r, 4000));
+      pollWorkflow(pat);
+    } else {
+      const txt = await resp.text();
+      setStatus('failed', `Error ${resp.status}: ${txt.slice(0,120)}`);
+      resetBtn();
+    }
+  } catch(e) {
+    setStatus('failed', e.message);
+    resetBtn();
+  }
+}
+
+async function pollWorkflow(pat) {
+  if (pollTimer) clearInterval(pollTimer);
+  let attempts = 0;
+  pollTimer = setInterval(async () => {
+    attempts++;
+    if (attempts > 60) { clearInterval(pollTimer); resetBtn(); return; }
+    try {
+      const r = await fetch(`https://api.github.com/repos/${GH_REPO}/actions/runs?per_page=5`,
+        { headers: { 'Authorization': `token ${pat}`, 'Accept': 'application/vnd.github.v3+json' } });
+      const data = await r.json();
+      const run = (data.workflow_runs || [])[0];
+      if (!run) return;
+      const status = run.status;
+      const conclusion = run.conclusion;
+      if (status === 'completed') {
+        clearInterval(pollTimer);
+        if (conclusion === 'success') {
+          setStatus('success', `✅ Backtest complete! Refreshing results...`);
+          setTimeout(() => { loadRuns(); resetBtn(); }, 2000);
+        } else {
+          setStatus('failed', `Run ${conclusion}. Check Actions tab for logs.`);
+          resetBtn();
+        }
+      } else {
+        const elapsed = Math.round((Date.now() - new Date(run.created_at)) / 1000);
+        setStatus('running', `⏳ ${status}... ${elapsed}s elapsed · <a href="${run.html_url}" target="_blank" style="color:var(--accent)">View logs</a>`);
+      }
+    } catch(e) {}
+  }, 8000);
+}
+
+function setStatus(type, msg) {
+  const badge = document.getElementById('status_badge');
+  const msgEl = document.getElementById('status_msg');
+  badge.className = `badge ${type}`;
+  const labels = { running: '⏳ Running', success: '✅ Done', failed: '❌ Failed', idle: '— Idle' };
+  badge.innerHTML = `<span class="dot ${type==='running'?'pulse':''}"></span> ${labels[type]||type}`;
+  msgEl.innerHTML = msg;
+}
+
+function resetBtn() {
+  const btn = document.getElementById('run_btn');
+  btn.disabled = false;
+  btn.classList.remove('running');
+  document.getElementById('run_label').textContent = 'Run Backtest';
+  document.getElementById('run_icon').textContent = '▶';
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.getElementById('end_date').value = new Date().toISOString().slice(0,10);
+loadRuns();
+</script>
+</body>
+</html>
