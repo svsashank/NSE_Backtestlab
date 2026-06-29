@@ -163,6 +163,11 @@
         <div class="s-desc">RSI&gt;50 filter removed. Ranked by avg(RSI₁₄, RSI₂₂, RSI₇₂) — multi-timeframe momentum strength.</div>
         <span class="s-tag">New</span>
       </div>
+      <div class="strategy-card" data-id="s03_near_miss_momentum" onclick="selectStrategy(this)">
+        <div class="s-name">Near-Miss Momentum</div>
+        <div class="s-desc">Near-miss promotion (1 filter within 10%) + hold zone anti-whipsaw (top 25). Vol 80%, CMF 0.05.</div>
+        <span class="s-tag">New</span>
+      </div>
     </div>
 
     <div>
@@ -276,8 +281,9 @@ const GH_WORKFLOW = 'run_backtest.yml';
 const PALETTE = ['#6366f1','#22d3ee','#10b981','#f59e0b','#ef4444','#a78bfa'];
 
 const STRATEGIES = {
-  s01_sma_momentum:  { name: 'SMA Momentum',   color: '#6366f1' },
-  s02_rsi_composite: { name: 'RSI Composite',  color: '#22d3ee' },
+  s01_sma_momentum:       { name: 'SMA Momentum',       color: '#6366f1' },
+  s02_rsi_composite:      { name: 'RSI Composite',      color: '#22d3ee' },
+  s03_near_miss_momentum: { name: 'Near-Miss Momentum', color: '#f59e0b' },
 };
 
 let selectedStrategy = 's01_sma_momentum';
