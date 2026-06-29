@@ -110,8 +110,9 @@ def run_backtest(ind, config, rebalance_dates, initial_capital,
 
         # Screen using only data up to this date — no lookahead
         ind_slice = _ind_slice_up_to(ind, rebal_date)
-        top15, all_passing, rejections, screen_date = run_screen(ind_slice, config)
+        top_n, all_passing, hold_zone, rejections, screen_date = run_screen(ind_slice, config)
         n_passed = len(all_passing)
+        hold_zone_set = set(hold_zone['ticker'].tolist()) if not hold_zone.empty else set()
 
         passing_tickers = set(all_passing['ticker']) if not all_passing.empty else set()
         rank_map = {r['ticker']: idx_ for idx_, r in all_passing.reset_index().iterrows()} \
@@ -135,18 +136,23 @@ def run_backtest(ind, config, rebalance_dates, initial_capital,
                 print(f'{label} [{i+1}/{len(rebalance_dates)}] {status}')
 
         else:
-            # ── Determine target tickers (retention buffer + top-up) ──────
+            # ── Determine target tickers using hold-zone anti-whipsaw logic ──
             if retention_rank > 0:
+                # Legacy mode: use retention_rank if explicitly set
+                passing_tickers = set(all_passing['ticker']) if not all_passing.empty else set()
+                rank_map = {r['ticker']: idx_ for idx_, r in all_passing.reset_index().iterrows()}                     if not all_passing.empty else {}
                 retained = [t for t in holdings
                             if t in passing_tickers and rank_map.get(t, 999) <= retention_rank]
                 slots_remaining = portfolio_size - len(retained)
-                fill_candidates = top15['ticker'].tolist() if not top15.empty else []
+                fill_candidates = top_n['ticker'].tolist() if not top_n.empty else []
                 fill = [t for t in fill_candidates if t not in retained][:max(slots_remaining, 0)]
                 target = retained + fill
             else:
-                # Original notebook behaviour: target = fresh top-N passing
-                slots_available = min(n_passed, portfolio_size)
-                target = top15.head(slots_available)['ticker'].tolist() if not top15.empty else []
+                # Hold-zone mode: sell only if out of top 25, buy from top 15
+                held_kept      = [t for t in holdings if t in hold_zone_set]
+                buy_candidates = [t for t in (top_n['ticker'].tolist() if not top_n.empty else [])
+                                  if t not in holdings]
+                target = (held_kept + buy_candidates)[:portfolio_size]
 
             slots_used = len(target)
             cash_slots = portfolio_size - slots_used
@@ -157,7 +163,7 @@ def run_backtest(ind, config, rebalance_dates, initial_capital,
             if verbose:
                 print(f'{label} [{i+1}/{len(rebalance_dates)}] {status} | '
                       f'adv={rejections["adv"]:2d} vol={rejections["volatility"]:2d} '
-                      f'rsi={rejections["rsi"]:2d} cmf={rejections.get("cmf", 0):2d}')
+                      f'rsi={rejections["rsi"]:2d} cmf={rejections.get("cmf", 0):2d} hz={len(hold_zone_set)}')
 
             # Sell exits -- holdings no longer in target
             for ticker in [t for t in list(holdings.keys()) if t not in target]:
