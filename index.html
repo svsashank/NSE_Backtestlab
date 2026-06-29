@@ -30,7 +30,10 @@
   /* Form Controls */
   .form-group { margin-bottom: 14px; }
   label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
-  select, input { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 8px 12px; font-size: 13px; outline: none; transition: border-color 0.2s; }
+  select, input[type=text], input[type=number], input[type=date], input[type=password] {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 8px 12px; font-size: 13px; outline: none; transition: border-color 0.2s;
+  }
   select:focus, input:focus { border-color: var(--accent); }
   select option { background: var(--surface2); }
 
@@ -56,6 +59,41 @@
   .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
   .dot.pulse { animation: pulse 1.2s infinite; }
   @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+
+  /* ── Filter Overrides Collapsible ── */
+  .overrides-header {
+    display: flex; align-items: center; justify-content: space-between;
+    cursor: pointer; padding: 10px 12px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 8px; transition: border-color 0.2s;
+    user-select: none;
+  }
+  .overrides-header:hover { border-color: var(--accent); }
+  .overrides-header .oh-left { display: flex; align-items: center; gap: 8px; }
+  .overrides-header .oh-title { font-size: 12px; font-weight: 600; color: var(--text); }
+  .overrides-header .oh-badge {
+    font-size: 10px; background: rgba(99,102,241,0.18); color: var(--accent);
+    padding: 2px 6px; border-radius: 4px; font-weight: 700;
+  }
+  .overrides-header .oh-badge.active { background: rgba(34,211,238,0.18); color: var(--accent2); }
+  .overrides-chevron { color: var(--muted); font-size: 11px; transition: transform 0.2s; }
+  .overrides-chevron.open { transform: rotate(180deg); }
+  .overrides-body { display: none; padding: 14px 0 0; }
+  .overrides-body.open { display: block; }
+
+  /* Two-column grid for filter fields */
+  .filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .filter-field label { font-size: 11px; color: var(--muted); margin-bottom: 4px; display: flex; justify-content: space-between; }
+  .filter-field label span { color: #475569; font-weight: 400; font-size: 10px; }
+  .filter-field input { padding: 6px 10px; font-size: 12px; }
+  .filter-field input.modified { border-color: var(--accent2); background: rgba(34,211,238,0.05); }
+
+  .reset-overrides-btn {
+    margin-top: 10px; width: 100%; padding: 7px; background: none; border: 1px solid var(--border);
+    color: var(--muted); border-radius: 7px; font-size: 12px; cursor: pointer; transition: all 0.2s;
+  }
+  .reset-overrides-btn:hover { border-color: var(--red); color: var(--red); }
+
+  .override-hint { font-size: 10px; color: var(--muted); padding: 8px 0 4px; line-height: 1.5; }
 
   /* ── Right Panel ── */
   .right-panel { overflow-y: auto; padding: 20px 24px; display: flex; flex-direction: column; gap: 20px; }
@@ -89,6 +127,14 @@
   .run-detail { padding: 0 16px 16px; border-top: 1px solid var(--border); margin-top: 0; display: none; }
   .run-detail.open { display: block; }
   .chart-wrap { height: 220px; margin: 16px 0 8px; position: relative; }
+
+  /* Params pill list inside run card */
+  .params-pills { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 2px; }
+  .params-pill {
+    font-size: 10px; padding: 2px 7px; border-radius: 4px;
+    background: rgba(99,102,241,0.1); color: var(--accent); border: 1px solid rgba(99,102,241,0.2);
+  }
+  .params-pill.custom { background: rgba(34,211,238,0.1); color: var(--accent2); border-color: rgba(34,211,238,0.2); }
 
   /* Compare bar */
   .compare-bar { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -171,7 +217,7 @@
     </div>
 
     <div>
-      <div class="section-title">Parameters</div>
+      <div class="section-title">Run Parameters</div>
       <div class="form-group">
         <label>Rebalance Frequency</label>
         <select id="rebalance">
@@ -201,6 +247,87 @@
           <input type="checkbox" id="no_trim">
           <span class="toggle-slider"></span>
         </label>
+      </div>
+    </div>
+
+    <!-- ── FILTER OVERRIDES ── -->
+    <div>
+      <div class="overrides-header" onclick="toggleOverrides()">
+        <div class="oh-left">
+          <span>🎛</span>
+          <span class="oh-title">Filter Overrides</span>
+          <span class="oh-badge" id="overrides_badge">defaults</span>
+        </div>
+        <span class="overrides-chevron" id="overrides_chevron">▼</span>
+      </div>
+      <div class="overrides-body" id="overrides_body">
+        <div class="override-hint">
+          Leave blank to use each strategy's defaults. Modified fields are highlighted in cyan.
+        </div>
+        <div class="filter-grid">
+
+          <div class="filter-field">
+            <label>Min MCap <span>Cr ₹ · def 1000</span></label>
+            <input type="number" id="ov_min_mcap" placeholder="1000" min="0" step="100" oninput="onOverrideChange()">
+          </div>
+
+          <div class="filter-field">
+            <label>Min ADV <span>Cr ₹ · def 10</span></label>
+            <input type="number" id="ov_min_adv" placeholder="10" min="0" step="1" oninput="onOverrideChange()">
+          </div>
+
+          <div class="filter-field">
+            <label>Max Volatility <span>ann % · def 75</span></label>
+            <input type="number" id="ov_max_volatility" placeholder="75" min="1" max="200" step="5" oninput="onOverrideChange()">
+          </div>
+
+          <div class="filter-field">
+            <label>RSI Threshold <span>def 50</span></label>
+            <input type="number" id="ov_rsi_threshold" placeholder="50" min="1" max="99" step="1" oninput="onOverrideChange()">
+          </div>
+
+          <div class="filter-field">
+            <label>Max From High <span>% · def 25</span></label>
+            <input type="number" id="ov_max_from_high" placeholder="25" min="1" max="100" step="5" oninput="onOverrideChange()">
+          </div>
+
+          <div class="filter-field">
+            <label>SMA Buffer <span>% · def 5</span></label>
+            <input type="number" id="ov_sma_buffer" placeholder="5" min="0" max="30" step="1" oninput="onOverrideChange()">
+          </div>
+
+          <div class="filter-field">
+            <label>CMF Threshold <span>def 0.1</span></label>
+            <input type="number" id="ov_cmf_threshold" placeholder="0.1" min="-1" max="1" step="0.05" oninput="onOverrideChange()">
+          </div>
+
+          <div class="filter-field">
+            <label>CMF Period <span>days · def 20</span></label>
+            <input type="number" id="ov_cmf_period" placeholder="20" min="5" max="60" step="1" oninput="onOverrideChange()">
+          </div>
+
+          <div class="filter-field">
+            <label>SMA Short <span>days · def 21</span></label>
+            <input type="number" id="ov_sma_short" placeholder="21" min="5" max="100" step="1" oninput="onOverrideChange()">
+          </div>
+
+          <div class="filter-field">
+            <label>SMA Long <span>days · def 200</span></label>
+            <input type="number" id="ov_sma_long" placeholder="200" min="50" max="500" step="10" oninput="onOverrideChange()">
+          </div>
+
+          <div class="filter-field">
+            <label>RSI Period <span>days · def 14</span></label>
+            <input type="number" id="ov_rsi_period" placeholder="14" min="5" max="50" step="1" oninput="onOverrideChange()">
+          </div>
+
+          <div class="filter-field">
+            <label>Portfolio Size <span>stocks · def 15</span></label>
+            <input type="number" id="ov_portfolio_size" placeholder="15" min="1" max="50" step="1" oninput="onOverrideChange()">
+          </div>
+
+        </div>
+        <button class="reset-overrides-btn" onclick="resetOverrides()">↺ Reset to defaults</button>
       </div>
     </div>
 
@@ -286,11 +413,93 @@ const STRATEGIES = {
   s03_near_miss_momentum: { name: 'Near-Miss Momentum', color: '#f59e0b' },
 };
 
+// Defaults matching config_base.json (for display / reset)
+const FILTER_DEFAULTS = {
+  min_mcap:       1000,
+  min_adv:        10,
+  max_volatility: 75,    // displayed as %, sent as fraction /100
+  rsi_threshold:  50,
+  max_from_high:  25,    // displayed as %, sent as fraction /100
+  sma_buffer:     5,     // displayed as %, sent as fraction /100
+  cmf_threshold:  0.1,
+  cmf_period:     20,
+  sma_short:      21,
+  sma_long:       200,
+  rsi_period:     14,
+  portfolio_size: 15,
+};
+
+// Map from override field id → config key + conversion
+const OVERRIDE_FIELDS = [
+  { id: 'ov_min_mcap',       key: 'min_mcap',       conv: v => parseFloat(v) },
+  { id: 'ov_min_adv',        key: 'min_adv',         conv: v => parseFloat(v) },
+  { id: 'ov_max_volatility', key: 'max_volatility',  conv: v => parseFloat(v) / 100 },   // % → fraction
+  { id: 'ov_rsi_threshold',  key: 'rsi_threshold',   conv: v => parseFloat(v) },
+  { id: 'ov_max_from_high',  key: 'max_from_high',   conv: v => parseFloat(v) / 100 },   // % → fraction
+  { id: 'ov_sma_buffer',     key: 'sma_buffer',      conv: v => parseFloat(v) / 100 },   // % → fraction
+  { id: 'ov_cmf_threshold',  key: 'cmf_threshold',   conv: v => parseFloat(v) },
+  { id: 'ov_cmf_period',     key: 'cmf_period',      conv: v => parseInt(v) },
+  { id: 'ov_sma_short',      key: 'sma_short',       conv: v => parseInt(v) },
+  { id: 'ov_sma_long',       key: 'sma_long',        conv: v => parseInt(v) },
+  { id: 'ov_rsi_period',     key: 'rsi_period',      conv: v => parseInt(v) },
+  { id: 'ov_portfolio_size', key: 'portfolio_size',  conv: v => parseInt(v) },
+];
+
 let selectedStrategy = 's01_sma_momentum';
 let pollTimer = null;
 let compareRuns = [];
 let compareChart = null;
 let allRuns = [];
+let overridesOpen = false;
+
+// ── Override helpers ──────────────────────────────────────────────────────────
+function toggleOverrides() {
+  overridesOpen = !overridesOpen;
+  document.getElementById('overrides_body').classList.toggle('open', overridesOpen);
+  document.getElementById('overrides_chevron').classList.toggle('open', overridesOpen);
+}
+
+function onOverrideChange() {
+  let count = 0;
+  OVERRIDE_FIELDS.forEach(f => {
+    const el = document.getElementById(f.id);
+    const val = el.value.trim();
+    const modified = val !== '';
+    el.classList.toggle('modified', modified);
+    if (modified) count++;
+  });
+  const badge = document.getElementById('overrides_badge');
+  if (count === 0) {
+    badge.textContent = 'defaults';
+    badge.className = 'oh-badge';
+  } else {
+    badge.textContent = `${count} custom`;
+    badge.className = 'oh-badge active';
+  }
+}
+
+function resetOverrides() {
+  OVERRIDE_FIELDS.forEach(f => {
+    const el = document.getElementById(f.id);
+    el.value = '';
+    el.classList.remove('modified');
+  });
+  const badge = document.getElementById('overrides_badge');
+  badge.textContent = 'defaults';
+  badge.className = 'oh-badge';
+}
+
+function collectOverrides() {
+  const out = {};
+  OVERRIDE_FIELDS.forEach(f => {
+    const val = document.getElementById(f.id).value.trim();
+    if (val !== '') {
+      const converted = f.conv(val);
+      if (!isNaN(converted)) out[f.key] = converted;
+    }
+  });
+  return out;
+}
 
 // ── Strategy select ───────────────────────────────────────────────────────────
 function selectStrategy(el) {
@@ -340,6 +549,43 @@ function fmt(v, type) {
   return v;
 }
 
+// Render custom param pills from stored params vs defaults
+function renderParamPills(params) {
+  if (!params) return '';
+  const SKIP = new Set(['rank_fn','skip_filters','anchors','cash_mode','no_trim',
+    'lookback_days','adv_divisor','cost_buy','cost_sell','min_stocks_to_invest',
+    'retention_rank','risk_free_rate','universe_name','adv_period','vol_lookback',
+    'rsi_period_mid','rsi_period_long','hold_zone_size']);
+
+  // Base defaults (config_base.json)
+  const BASE = {
+    min_mcap: 1000, min_adv: 10, max_volatility: 0.75, rsi_threshold: 50,
+    max_from_high: 0.25, sma_buffer: 0.05, cmf_threshold: 0.1, cmf_period: 20,
+    sma_short: 21, sma_long: 200, rsi_period: 14, portfolio_size: 15,
+  };
+
+  const pills = [];
+  for (const [k, v] of Object.entries(params)) {
+    if (SKIP.has(k) || v == null) continue;
+    const isCustom = BASE[k] !== undefined && Math.abs(v - BASE[k]) > 1e-9;
+    const label = formatParamLabel(k, v);
+    pills.push(`<span class="params-pill ${isCustom ? 'custom' : ''}">${label}</span>`);
+  }
+  return pills.length ? `<div class="params-pills">${pills.join('')}</div>` : '';
+}
+
+function formatParamLabel(k, v) {
+  const PCT_KEYS = ['max_volatility','sma_buffer','max_from_high'];
+  const INT_KEYS = ['sma_short','sma_long','rsi_period','portfolio_size','cmf_period'];
+  if (PCT_KEYS.includes(k)) return `${k.replace(/_/g,' ')}: ${(v*100).toFixed(0)}%`;
+  if (INT_KEYS.includes(k)) return `${k.replace(/_/g,' ')}: ${parseInt(v)}`;
+  if (k === 'min_mcap')     return `MCap ≥ ₹${v}Cr`;
+  if (k === 'min_adv')      return `ADV ≥ ₹${v}Cr`;
+  if (k === 'rsi_threshold') return `RSI > ${v}`;
+  if (k === 'cmf_threshold') return `CMF > ${v}`;
+  return `${k.replace(/_/g,' ')}: ${typeof v === 'number' ? v.toFixed(2) : v}`;
+}
+
 function renderRuns(runs) {
   const grid = document.getElementById('results_grid');
   if (!runs.length) {
@@ -356,6 +602,7 @@ function renderRuns(runs) {
     const wins = p.win_rate != null ? (p.win_rate * 100).toFixed(0) + '%' : '—';
     const cagrN = p.cagr || 0;
     const checked = compareRuns.includes(r.id) ? 'checked' : '';
+    const paramPills = renderParamPills(r.params);
     return `
     <div class="run-card ${compareRuns.includes(r.id) ? 'selected' : ''}" id="card-${r.id}">
       <div class="run-header" onclick="toggleDetail('${r.id}')">
@@ -370,6 +617,7 @@ function renderRuns(runs) {
             <span>${r.params?.no_trim ? '✂️ no-trim' : '⚖️ trimmed'}</span>
             <span style="color:var(--muted)">${new Date(r.created_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</span>
           </div>
+          ${paramPills}
         </div>
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
           <div class="stat-chips">
@@ -405,7 +653,6 @@ function renderRuns(runs) {
 }
 
 // ── Toggle detail + draw chart ────────────────────────────────────────────────
-const openDetails = {};
 const detailCharts = {};
 
 async function toggleDetail(id) {
@@ -414,7 +661,6 @@ async function toggleDetail(id) {
   const isOpen = det.classList.contains('open');
   det.classList.toggle('open');
   if (!isOpen && !detailCharts[id]) {
-    // load equity curve
     try {
       const data = await sbFetch('backtest_results', `?select=equity_curve,strategy_id&id=eq.${id}`);
       if (data[0]?.equity_curve) {
@@ -512,20 +758,15 @@ async function renderCompare() {
   document.getElementById('compare_hint').style.display = 'none';
   document.getElementById('compare_content').style.display = 'block';
 
-  // Fetch full data for selected runs
-  const ids = compareRuns.map(id => `id=eq.${id}`).join(',');
-  // Supabase: use 'or' filter
   const param = `?select=id,strategy_id,strategy_name,rebalance_freq,date_range_start,performance,equity_curve&or=(${compareRuns.map(id=>`id.eq.${id}`).join(',')})`;
   const data = await sbFetch('backtest_results', param);
 
-  // Chart
   if (compareChart) compareChart.destroy();
   const ctx = document.getElementById('compareChart');
   compareChart = new Chart(ctx, {
     type: 'line',
     data: {
       datasets: data.map((r, i) => {
-        const strat = STRATEGIES[r.strategy_id] || { color: PALETTE[i] };
         const label = `${STRATEGIES[r.strategy_id]?.name || r.strategy_id} (${r.rebalance_freq})`;
         return {
           label,
@@ -552,15 +793,14 @@ async function renderCompare() {
     }
   });
 
-  // Comparison table
   const metrics = [
-    { key: 'cagr',           label: 'CAGR',         fmt: v => (v*100).toFixed(1)+'%', better: 'high' },
-    { key: 'total_return',   label: 'Total Return',  fmt: v => ((v+1)).toFixed(2)+'x', better: 'high' },
-    { key: 'sharpe',         label: 'Sharpe',        fmt: v => v.toFixed(2),           better: 'high' },
-    { key: 'max_drawdown',   label: 'Max Drawdown',  fmt: v => (v*100).toFixed(1)+'%', better: 'low'  },
-    { key: 'ann_volatility', label: 'Ann. Volatility',fmt: v => (v*100).toFixed(1)+'%',better: 'low' },
-    { key: 'win_rate',       label: 'Win Rate',      fmt: v => (v*100).toFixed(1)+'%', better: 'high' },
-    { key: 'years',          label: 'Years',         fmt: v => v.toFixed(1),           better: null  },
+    { key: 'cagr',           label: 'CAGR',          fmt: v => (v*100).toFixed(1)+'%', better: 'high' },
+    { key: 'total_return',   label: 'Total Return',   fmt: v => ((v+1)).toFixed(2)+'x', better: 'high' },
+    { key: 'sharpe',         label: 'Sharpe',         fmt: v => v.toFixed(2),           better: 'high' },
+    { key: 'max_drawdown',   label: 'Max Drawdown',   fmt: v => (v*100).toFixed(1)+'%', better: 'low'  },
+    { key: 'ann_volatility', label: 'Ann. Volatility',fmt: v => (v*100).toFixed(1)+'%', better: 'low' },
+    { key: 'win_rate',       label: 'Win Rate',       fmt: v => (v*100).toFixed(1)+'%', better: 'high' },
+    { key: 'years',          label: 'Years',          fmt: v => v.toFixed(1),           better: null  },
   ];
 
   document.getElementById('compare_thead').innerHTML = `<tr><th>Metric</th>${data.map((r,i) => `<th style="color:${PALETTE[i]}">${STRATEGIES[r.strategy_id]?.name || r.strategy_id}<br><span style="font-weight:400;color:var(--muted)">${r.rebalance_freq} · ${r.date_range_start}</span></th>`).join('')}</tr>`;
@@ -581,20 +821,27 @@ async function triggerBacktest() {
   if (!pat) { alert('Enter your GitHub PAT first'); return; }
 
   const noTrim = document.getElementById('no_trim').checked;
+  const overrides = collectOverrides();
+
   const params = {
-    strategy_id:    selectedStrategy,
-    rebalance_type: document.getElementById('rebalance').value,
+    strategy_id:     selectedStrategy,
+    rebalance_type:  document.getElementById('rebalance').value,
     initial_capital: Number(document.getElementById('capital').value),
-    start_date:     document.getElementById('start_date').value || null,
-    end_date:       document.getElementById('end_date').value   || null,
-    no_trim:        noTrim,
+    start_date:      document.getElementById('start_date').value || null,
+    end_date:        document.getElementById('end_date').value   || null,
+    no_trim:         noTrim,
+    ...overrides,    // merge filter overrides into params
   };
 
   const btn = document.getElementById('run_btn');
   btn.disabled = true;
   btn.classList.add('running');
   document.getElementById('run_label').textContent = 'Triggering...';
-  setStatus('running', 'Sending to GitHub Actions...');
+
+  const overrideCount = Object.keys(overrides).length;
+  setStatus('running', overrideCount > 0
+    ? `Sending to GitHub Actions with ${overrideCount} filter override${overrideCount>1?'s':''}...`
+    : 'Sending to GitHub Actions...');
 
   try {
     const resp = await fetch(
