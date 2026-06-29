@@ -114,17 +114,83 @@ def run_screen(ind, config):
     }).sort_values("rank_score", ascending=False).reset_index(drop=True)
     universe_df.index += 1
 
-    if not passed.any():
-        return pd.DataFrame(), pd.DataFrame(), rejections, screen_date
+    # ── Near-miss detection: exactly 1 strict filter failing within 10% ─────
+    NEAR_MISS_TOL = 0.10
+    NM_MIN_MCAP   = MIN_MCAP        * (1 - NEAR_MISS_TOL)
+    NM_MIN_ADV    = MIN_ADV         * (1 - NEAR_MISS_TOL)
+    NM_MAX_VOL    = MAX_VOLATILITY  * (1 + NEAR_MISS_TOL)
+    NM_RSI        = RSI_THRESHOLD   * (1 - NEAR_MISS_TOL)
+    NM_SMA_BUFFER = SMA_BUFFER      * (1 + NEAR_MISS_TOL)
+    NM_MAX_HIGH   = MAX_FROM_HIGH   * (1 + NEAR_MISS_TOL)
+    NM_CMF        = CMF_THRESHOLD   * (1 - NEAR_MISS_TOL)
 
-    pt     = passed[passed].index.tolist()
-    result = universe_df[universe_df["ticker"].isin(pt)].copy().reset_index(drop=True)
-    result.index += 1
+    nm_mcap = mcap_row.ge(NM_MIN_MCAP).fillna(False)
+    nm_adv  = adv_row.ge(NM_MIN_ADV)
+    nm_vol  = vol_row.le(NM_MAX_VOL)  if "vol"    not in skip_filters else pd.Series(True, index=close_row.index)
+    nm_rsi  = rsi_row.ge(NM_RSI)      if "rsi"    not in skip_filters else pd.Series(True, index=close_row.index)
+    nm_sma  = close_row.ge(sma_s_row.mul(1 - NM_SMA_BUFFER)) if "sma" not in skip_filters else pd.Series(True, index=close_row.index)
+    nm_high = close_row.ge(high52_row.mul(1 - NM_MAX_HIGH))   if "high52w" not in skip_filters else pd.Series(True, index=close_row.index)
+    nm_cmf  = cmf_row.ge(NM_CMF)      if "cmf"    not in skip_filters else pd.Series(True, index=close_row.index)
 
-    top_n       = result.head(PORTFOLIO_SIZE).copy()
-    all_passing = result.copy()
+    filter_pairs = [
+        ("mcap", m_mcap, nm_mcap), ("adv",  m_adv,  nm_adv),
+        ("vol",  m_vol,  nm_vol),  ("rsi",  m_rsi,  nm_rsi),
+        ("sma",  m_sma,  nm_sma),  ("high", m_high, nm_high),
+        ("cmf",  m_cmf,  nm_cmf),
+    ]
 
-    print(f"\n✅ Screen date: {screen_date.date()} | Passing: {len(all_passing)} | Top {PORTFOLIO_SIZE}: {len(top_n)}")
-    print(top_n[["ticker", "price", "rank_score", "rsi", "adv_m", "cmf"]].to_string())
+    is_near_miss_map    = {}
+    near_miss_filter_map = {}
+    for t in all_tickers:
+        if passed[t]:
+            is_near_miss_map[t]     = False
+            near_miss_filter_map[t] = None
+            continue
+        strict_fails  = [name for name, sm, _  in filter_pairs if not sm[t]]
+        relaxed_fails = [name for name, _,  rm in filter_pairs if not rm[t]]
+        if len(strict_fails) == 1 and len(relaxed_fails) == 0:
+            is_near_miss_map[t]     = True
+            near_miss_filter_map[t] = strict_fails[0]
+        else:
+            is_near_miss_map[t]     = False
+            near_miss_filter_map[t] = None
 
-    return top_n, all_passing, rejections, screen_date
+    universe_df["is_near_miss"]     = [is_near_miss_map[t]     for t in all_tickers]
+    universe_df["near_miss_filter"] = [near_miss_filter_map[t] for t in all_tickers]
+
+    # ── Walk by rank: include strict pass OR near-miss (top 50 only) ──────────
+    HOLD_ZONE_SIZE = config.get("hold_zone_size", 25)
+
+    top_n_rows     = []
+    hold_zone_rows = []
+    n_promoted     = 0
+
+    for rank_pos, row in universe_df.iterrows():  # 1-based, sorted by rank desc
+        if len(hold_zone_rows) >= HOLD_ZONE_SIZE:
+            break
+        eligible = row["passes_all"] or (row["is_near_miss"] and rank_pos <= 50)
+        if not eligible:
+            continue
+        hold_zone_rows.append(row)
+        if len(top_n_rows) < PORTFOLIO_SIZE:
+            top_n_rows.append(row)
+            if row["is_near_miss"]:
+                n_promoted += 1
+
+    top_n_df     = pd.DataFrame(top_n_rows).reset_index(drop=True)
+    hold_zone_df = pd.DataFrame(hold_zone_rows).reset_index(drop=True)
+    all_passing  = universe_df[universe_df["passes_all"]].copy().reset_index(drop=True)
+
+    if top_n_df.empty:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), rejections, screen_date
+
+    top_n_df.index     += 1
+    hold_zone_df.index += 1
+    all_passing.index  += 1
+
+    n_strict = len(top_n_df) - n_promoted
+    n_cash   = PORTFOLIO_SIZE - len(top_n_df)
+    print(f"\n✅ Screen date: {screen_date.date()} | Strict: {len(all_passing)} | "
+          f"Near-miss promoted: {n_promoted} | Hold zone: {len(hold_zone_df)} | Cash slots: {n_cash}")
+
+    return top_n_df, all_passing, hold_zone_df, rejections, screen_date
