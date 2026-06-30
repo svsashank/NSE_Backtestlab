@@ -331,6 +331,31 @@
       </div>
     </div>
 
+    <!-- ── GOLD SLEEVE ── -->
+    <div>
+      <div class="overrides-header" onclick="toggleGoldSleeve()">
+        <div class="oh-left">
+          <span>🟡</span>
+          <span class="oh-title">Gold Sleeve</span>
+          <span class="oh-badge" id="gold_badge">off</span>
+        </div>
+        <span class="overrides-chevron" id="gold_chevron">▼</span>
+      </div>
+      <div class="overrides-body" id="gold_body">
+        <div class="override-hint">
+          Reserves a fixed % of the portfolio in a gold ETF, rebalanced back to target weight every period. The remaining % runs the selected strategy as usual.
+        </div>
+        <div class="form-group" style="margin-top:8px">
+          <label>Gold Allocation <span style="color:#475569;font-weight:400">% of portfolio</span></label>
+          <input type="number" id="gold_allocation" placeholder="0" min="0" max="90" step="5" oninput="onGoldChange()">
+        </div>
+        <div class="form-group">
+          <label>Gold ETF Ticker</label>
+          <input type="text" id="gold_ticker" placeholder="GOLDBEES.NS" oninput="onGoldChange()">
+        </div>
+      </div>
+    </div>
+
     <div>
       <div class="section-title">GitHub Auth</div>
       <div class="form-group">
@@ -489,6 +514,38 @@ function resetOverrides() {
   badge.className = 'oh-badge';
 }
 
+// ── Gold sleeve helpers ───────────────────────────────────────────────────────
+let goldOpen = false;
+
+function toggleGoldSleeve() {
+  goldOpen = !goldOpen;
+  document.getElementById('gold_body').classList.toggle('open', goldOpen);
+  document.getElementById('gold_chevron').classList.toggle('open', goldOpen);
+}
+
+function onGoldChange() {
+  const pct = document.getElementById('gold_allocation').value.trim();
+  const badge = document.getElementById('gold_badge');
+  if (pct && parseFloat(pct) > 0) {
+    badge.textContent = `${pct}% gold`;
+    badge.className = 'oh-badge active';
+  } else {
+    badge.textContent = 'off';
+    badge.className = 'oh-badge';
+  }
+}
+
+function collectGoldParams() {
+  const pct = document.getElementById('gold_allocation').value.trim();
+  const ticker = document.getElementById('gold_ticker').value.trim();
+  const out = {};
+  if (pct && parseFloat(pct) > 0) {
+    out.gold_allocation = parseFloat(pct) / 100;   // % → fraction
+    out.gold_ticker = ticker || 'GOLDBEES.NS';
+  }
+  return out;
+}
+
 function collectOverrides() {
   const out = {};
   OVERRIDE_FIELDS.forEach(f => {
@@ -555,7 +612,7 @@ function renderParamPills(params) {
   const SKIP = new Set(['rank_fn','skip_filters','anchors','cash_mode','no_trim',
     'lookback_days','adv_divisor','cost_buy','cost_sell','min_stocks_to_invest',
     'retention_rank','risk_free_rate','universe_name','adv_period','vol_lookback',
-    'rsi_period_mid','rsi_period_long','hold_zone_size']);
+    'rsi_period_mid','rsi_period_long','hold_zone_size','gold_allocation','gold_ticker']);
 
   // Base defaults (config_base.json)
   const BASE = {
@@ -565,6 +622,9 @@ function renderParamPills(params) {
   };
 
   const pills = [];
+  if (params.gold_allocation) {
+    pills.push(`<span class="params-pill custom">🟡 Gold ${(params.gold_allocation*100).toFixed(0)}% (${params.gold_ticker || 'GOLDBEES.NS'})</span>`);
+  }
   for (const [k, v] of Object.entries(params)) {
     if (SKIP.has(k) || v == null) continue;
     const isCustom = BASE[k] !== undefined && Math.abs(v - BASE[k]) > 1e-9;
@@ -822,6 +882,7 @@ async function triggerBacktest() {
 
   const noTrim = document.getElementById('no_trim').checked;
   const overrides = collectOverrides();
+  const goldParams = collectGoldParams();
 
   const params = {
     strategy_id:     selectedStrategy,
@@ -831,6 +892,7 @@ async function triggerBacktest() {
     end_date:        document.getElementById('end_date').value   || null,
     no_trim:         noTrim,
     ...overrides,    // merge filter overrides into params
+    ...goldParams,   // merge gold sleeve config into params
   };
 
   const btn = document.getElementById('run_btn');
@@ -839,9 +901,10 @@ async function triggerBacktest() {
   document.getElementById('run_label').textContent = 'Triggering...';
 
   const overrideCount = Object.keys(overrides).length;
+  const goldMsg = goldParams.gold_allocation ? ` + ${(goldParams.gold_allocation*100).toFixed(0)}% gold sleeve` : '';
   setStatus('running', overrideCount > 0
-    ? `Sending to GitHub Actions with ${overrideCount} filter override${overrideCount>1?'s':''}...`
-    : 'Sending to GitHub Actions...');
+    ? `Sending to GitHub Actions with ${overrideCount} filter override${overrideCount>1?'s':''}${goldMsg}...`
+    : `Sending to GitHub Actions${goldMsg}...`);
 
   try {
     const resp = await fetch(
