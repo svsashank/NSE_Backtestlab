@@ -17,6 +17,15 @@ Required config keys (in addition to the screener_engine keys):
                          anything not in the fresh top-N, matching the
                          original notebook's behaviour)
     risk_free_rate      annual %, used to accrue returns on uninvested cash
+
+Optional gold sleeve (static asset allocation overlay):
+    gold_allocation      fraction of portfolio (0-1) permanently held in a
+                         gold ETF, rebalanced back to target weight at every
+                         rebalance date alongside the equity sleeve. Default 0
+                         (no gold sleeve — fully backward compatible).
+    gold_ticker          ticker string, informational only (the actual price
+                         series is passed in via the `gold_prices` arg to
+                         run_backtest(), not read from config).
 """
 
 import pandas as pd
@@ -48,9 +57,19 @@ def _ind_slice_up_to(ind, date):
     return {k: v.loc[:date] for k, v in ind.items()}
 
 
+def _gold_price_on(gold_prices, date):
+    """ffill lookup of gold price at/before `date`. Returns np.nan if no data."""
+    if gold_prices is None or gold_prices.empty:
+        return np.nan
+    idx = gold_prices.index.get_indexer([date], method='ffill')[0]
+    if idx == -1:
+        return np.nan
+    return gold_prices.iloc[idx]
+
+
 # ── Main backtest loop ───────────────────────────────────────────────────────
 def run_backtest(ind, config, rebalance_dates, initial_capital,
-                 verbose=True):
+                 verbose=True, gold_prices=None):
     """
     Walk through `rebalance_dates`, applying core.screener_engine.run_screen
     at each date (no lookahead — only data up to that date is visible), and
@@ -63,10 +82,15 @@ def run_backtest(ind, config, rebalance_dates, initial_capital,
             keys listed in the module docstring
     rebalance_dates: DatetimeIndex, output of get_rebalance_dates()
     initial_capital: starting portfolio value (in the market's currency)
+    gold_prices: optional pd.Series of gold ETF close prices, indexed by
+                 date, covering the backtest period. Required only if
+                 config['gold_allocation'] > 0.
 
     Returns (portfolio_df, trades_df, snapshots_df):
         portfolio_df: DataFrame indexed by date, column 'value'
-        trades_df:    DataFrame of all BUY/SELL/SELL_CASH/SELL_CAP/TRIM trades
+                      (plus 'equity_value', 'gold_value' when gold sleeve active)
+        trades_df:    DataFrame of all BUY/SELL/SELL_CASH/SELL_CAP/TRIM/
+                      GOLD_BUY/GOLD_SELL/GOLD_REBALANCE trades
         snapshots_df: DataFrame indexed by date with per-period detail
                       (stocks_screened, slots_used, cash_slots, in_cash,
                       cash_balance, top_picks, rejection counts)
@@ -80,10 +104,20 @@ def run_backtest(ind, config, rebalance_dates, initial_capital,
     risk_free_rate       = config.get('risk_free_rate', 0.0)
     no_trim              = config.get('no_trim', False)   # if True, winners are never trimmed back to equal weight
 
+    gold_allocation = float(config.get('gold_allocation', 0.0) or 0.0)
+    gold_allocation = min(max(gold_allocation, 0.0), 1.0)  # clamp to [0, 1]
+    gold_active = gold_allocation > 0.0 and gold_prices is not None and not gold_prices.empty
+
+    if config.get('gold_allocation', 0.0) and not gold_active:
+        if verbose:
+            print(f"⚠ gold_allocation={config.get('gold_allocation')} requested but no gold price "
+                  f"series available — running without gold sleeve.")
+
     daily_cash_return = (1 + risk_free_rate / 100) ** (1 / 252) - 1
 
     capital          = float(initial_capital)
     holdings         = {}   # ticker -> {'shares': int, 'cost_price': float}
+    gold_shares      = 0.0  # fractional shares allowed for gold sleeve (ETF, smaller notional)
     prev_rebal_date  = None
     cash_periods     = 0
 
@@ -102,11 +136,42 @@ def run_backtest(ind, config, rebalance_dates, initial_capital,
         # Value current holdings at today's prices
         idx = ind['close'].index.get_indexer([rebal_date], method='ffill')[0]
         price_row = ind['close'].iloc[idx]
-        portfolio_value = capital
+
+        gold_price = _gold_price_on(gold_prices, rebal_date) if gold_active else np.nan
+        gold_value = gold_shares * gold_price if (gold_active and pd.notna(gold_price)) else 0.0
+
+        portfolio_value = capital + gold_value
         for ticker, pos in holdings.items():
             p = price_row.get(ticker, np.nan)
             if pd.notna(p):
                 portfolio_value += pos['shares'] * p
+
+        # Target gold sleeve value at this rebalance, and the equity-sleeve
+        # budget the screener/sizing logic below should treat as "portfolio value"
+        target_gold_value = portfolio_value * gold_allocation if gold_active else 0.0
+        equity_budget      = portfolio_value - target_gold_value
+
+        # Rebalance gold sleeve back to target weight (if active and price available)
+        if gold_active and pd.notna(gold_price) and gold_price > 0:
+            gold_diff_value = target_gold_value - gold_value
+            if abs(gold_diff_value) > gold_price * 0.01:   # ignore dust-sized rebalances
+                if gold_diff_value > 0:
+                    # Buy more gold
+                    buy_shares = (gold_diff_value * (1 - cost_buy)) / gold_price
+                    cost = buy_shares * gold_price * (1 + cost_buy)
+                    if cost <= capital:
+                        capital -= cost
+                        gold_shares += buy_shares
+                        trade_log.append({'date': rebal_date, 'ticker': config.get('gold_ticker', 'GOLD'),
+                                           'action': 'GOLD_BUY', 'price': gold_price, 'shares': round(buy_shares, 4)})
+                else:
+                    # Sell down gold
+                    sell_shares = min(gold_shares, -gold_diff_value / gold_price)
+                    if sell_shares > 0:
+                        capital += sell_shares * gold_price * (1 - cost_sell)
+                        gold_shares -= sell_shares
+                        trade_log.append({'date': rebal_date, 'ticker': config.get('gold_ticker', 'GOLD'),
+                                           'action': 'GOLD_SELL', 'price': gold_price, 'shares': round(sell_shares, 4)})
 
         # Screen using only data up to this date — no lookahead
         ind_slice = _ind_slice_up_to(ind, rebal_date)
@@ -161,9 +226,10 @@ def run_backtest(ind, config, rebalance_dates, initial_capital,
             status = (f'{n_passed} passed -> {slots_used} stocks + {cash_slots} cash slots'
                       if cash_slots > 0 else f'{n_passed} passed -> {slots_used} selected')
             if verbose:
+                gold_tag = f' | gold={target_gold_value/portfolio_value*100:.0f}%' if gold_active else ''
                 print(f'{label} [{i+1}/{len(rebalance_dates)}] {status} | '
                       f'adv={rejections["adv"]:2d} vol={rejections["volatility"]:2d} '
-                      f'rsi={rejections["rsi"]:2d} cmf={rejections.get("cmf", 0):2d} hz={len(hold_zone_set)}')
+                      f'rsi={rejections["rsi"]:2d} cmf={rejections.get("cmf", 0):2d} hz={len(hold_zone_set)}{gold_tag}')
 
             # Sell exits -- holdings no longer in target
             for ticker in [t for t in list(holdings.keys()) if t not in target]:
@@ -175,8 +241,10 @@ def run_backtest(ind, config, rebalance_dates, initial_capital,
                                        'shares': holdings[ticker]['shares']})
                 del holdings[ticker]
 
-            # Equal allocation per slot; unfilled slots remain as cash
-            value_per_slot = portfolio_value / portfolio_size
+            # Equal allocation per slot; unfilled slots remain as cash.
+            # value_per_slot is sized off the equity sleeve budget (post gold
+            # carve-out) so the gold allocation isn't diluted by stock buys.
+            value_per_slot = equity_budget / portfolio_size
 
             # Trim overweight existing positions back to value_per_slot
             # Skipped when config['no_trim'] = True — winners run freely until exit
@@ -210,15 +278,32 @@ def run_backtest(ind, config, rebalance_dates, initial_capital,
                                            'action': 'BUY', 'price': p,
                                            'shares': shares_to_buy})
 
-        portfolio_values.append({'date': rebal_date, 'value': portfolio_value})
+        # Recompute gold value after any gold trades above (price unchanged within this date)
+        gold_value_final = gold_shares * gold_price if (gold_active and pd.notna(gold_price)) else 0.0
+
+        # Recompute equity sleeve value cleanly post-trades for reporting
+        equity_only_value = sum(
+            holdings[t]['shares'] * price_row.get(t, np.nan)
+            for t in holdings if pd.notna(price_row.get(t, np.nan))
+        )
+        final_portfolio_value = capital + gold_value_final + equity_only_value
+
+        row = {'date': rebal_date, 'value': final_portfolio_value}
+        if gold_active:
+            row['equity_value'] = equity_only_value
+            row['gold_value']   = gold_value_final
+        portfolio_values.append(row)
+
         snapshots.append({
             'date'           : rebal_date,
-            'portfolio_value': portfolio_value,
+            'portfolio_value': final_portfolio_value,
             'stocks_screened': n_passed,
             'slots_used'     : slots_used,
             'cash_slots'     : portfolio_size - slots_used,
             'in_cash'        : in_cash,
             'cash_balance'   : capital,
+            'gold_value'     : gold_value_final if gold_active else 0.0,
+            'gold_pct'       : (gold_value_final / final_portfolio_value) if (gold_active and final_portfolio_value > 0) else 0.0,
             'top_picks'      : list(holdings.keys()),
             'rej_adv'        : rejections.get('adv', 0),
             'rej_vol'        : rejections.get('volatility', 0),
@@ -237,10 +322,11 @@ def run_backtest(ind, config, rebalance_dates, initial_capital,
         full_cash = cash_periods
         partial   = int(((snapshots_df['cash_slots'] > 0) & (~snapshots_df['in_cash'])).sum())
         fully_inv = total - full_cash - partial
+        gold_note = f' | gold sleeve {gold_allocation*100:.0f}%' if gold_active else ''
         print(f'\nBacktest complete: {total} periods | '
               f'fully invested {fully_inv} ({fully_inv/total*100:.0f}%) | '
               f'partial cash {partial} ({partial/total*100:.0f}%) | '
-              f'full cash {full_cash} ({full_cash/total*100:.0f}%)')
+              f'full cash {full_cash} ({full_cash/total*100:.0f}%){gold_note}')
 
     return portfolio_df, trades_df, snapshots_df
 
