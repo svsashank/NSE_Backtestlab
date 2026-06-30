@@ -106,9 +106,13 @@ def main():
     # Allow GUI to override numeric params (on top of strategy overrides)
     int_keys  = ["portfolio_size", "sma_short", "sma_long", "min_stocks_to_invest", "retention_rank"]
     bool_keys = ["no_trim"]
+    str_keys  = ["gold_ticker"]
     skip_keys = {"strategy_id", "rebalance_type", "initial_capital", "start_date", "end_date"}
     for k, v in params.items():
         if k in skip_keys or v is None or v == "":
+            continue
+        if k in str_keys:
+            config[k] = str(v)
             continue
         if k in config and k not in ("rank_fn", "skip_filters", "anchors"):
             if k in bool_keys:
@@ -117,10 +121,17 @@ def main():
                 config[k] = int(v)
             else:
                 config[k] = float(v)
+        elif k == "gold_allocation":
+            # not in BASE_CONFIG by default — accept it directly (0-1 fraction)
+            config[k] = float(v)
     # Always pass no_trim even if not in base config
     if "no_trim" in params:
         v = params["no_trim"]
         config["no_trim"] = bool(v) if isinstance(v, bool) else str(v).lower() == "true"
+
+    # Gold sleeve defaults
+    config.setdefault("gold_allocation", 0.0)
+    config.setdefault("gold_ticker", "GOLDBEES.NS")
 
     # ── Load OHLCV history ────────────────────────────────────────────────────
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -154,9 +165,31 @@ def main():
     if len(rebalance_dates) < 2:
         raise RuntimeError("Fewer than 2 rebalance dates — widen the date range.")
 
+    # ── Optional gold sleeve: fetch gold ETF price series ────────────────────
+    gold_prices = None
+    if config.get("gold_allocation", 0.0) > 0:
+        gold_ticker = config.get("gold_ticker", "GOLDBEES.NS")
+        print(f"\nGold sleeve active: {config['gold_allocation']*100:.0f}% in {gold_ticker}")
+        try:
+            import yfinance as yf
+            gdata = yf.download(gold_ticker, start=str(bt_start.date()), end=str((bt_end + pd.Timedelta(days=2)).date()),
+                                auto_adjust=True, progress=False, timeout=30)
+            if gdata is not None and not gdata.empty:
+                close_col = gdata["Close"]
+                if hasattr(close_col, "columns"):   # MultiIndex edge case
+                    close_col = close_col.iloc[:, 0]
+                gold_prices = close_col.dropna()
+                gold_prices.index = pd.to_datetime(gold_prices.index)
+                print(f"   {gold_ticker}: {len(gold_prices)} rows, "
+                      f"{gold_prices.index[0].date()} → {gold_prices.index[-1].date()}")
+            else:
+                print(f"   ⚠ No data returned for {gold_ticker} — gold sleeve will be skipped")
+        except Exception as e:
+            print(f"   ⚠ Gold price fetch failed: {e} — gold sleeve will be skipped")
+
     # ── Run backtest ──────────────────────────────────────────────────────────
     portfolio_df, trades_df, snapshots_df = run_backtest(
-        ind, config, rebalance_dates, initial_capital, verbose=True
+        ind, config, rebalance_dates, initial_capital, verbose=True, gold_prices=gold_prices
     )
 
     stats = compute_performance_stats(portfolio_df, rebalance_type=rebalance_type,
