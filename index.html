@@ -181,6 +181,81 @@
   ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     Aesthetic polish + responsive layer (appended)
+     ══════════════════════════════════════════════════════════════════════ */
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background:
+      radial-gradient(1100px 560px at 100% -10%, rgba(34,211,238,.08), transparent 60%),
+      radial-gradient(900px 500px at -8% 0%, rgba(99,102,241,.10), transparent 55%),
+      var(--bg);
+    background-attachment: fixed;
+  }
+  button { -webkit-tap-highlight-color: transparent; }
+
+  /* Header: sticky + subtle depth */
+  .header { position: sticky; top: 0; z-index: 30; backdrop-filter: blur(8px); box-shadow: 0 4px 18px rgba(0,0,0,.22); }
+
+  /* Focus ring on inputs */
+  select:focus, input:focus { box-shadow: 0 0 0 3px rgba(99,102,241,.18); }
+
+  /* Button depth */
+  .run-btn { box-shadow: 0 4px 14px rgba(99,102,241,.30); }
+  .run-btn:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(99,102,241,.42); }
+  .run-btn:active:not(:disabled) { transform: translateY(0); }
+
+  /* Card depth */
+  .run-card, .compare-bar, .status-box { box-shadow: 0 2px 10px rgba(0,0,0,.16); }
+
+  /* ── Tablet / phone: collapse two-pane into one flowing column ── */
+  @media (max-width: 820px) {
+    .main {
+      display: block;
+      height: auto;
+    }
+    .left-panel {
+      height: auto;
+      overflow: visible;
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+      padding: 16px 14px;
+    }
+    .right-panel {
+      height: auto;
+      overflow: visible;
+      padding: 16px 14px;
+    }
+    .header { padding: 14px 16px; }
+    .header h1 { font-size: 16px; }
+    .header .subtitle { display: none; }
+
+    /* Tabs scroll horizontally if they overflow */
+    .tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab { white-space: nowrap; }
+
+    /* Wide tables scroll horizontally instead of squishing */
+    .table-wrap { overflow-x: auto; }
+    .compare-table { display: block; overflow-x: auto; white-space: nowrap; }
+  }
+
+  /* ── Narrow phones ── */
+  @media (max-width: 400px) {
+    .filter-grid { grid-template-columns: 1fr; }
+    .chart-wrap { height: 200px; }
+    .compare-chart-wrap { height: 260px; }
+    .run-meta { gap: 8px; }
+  }
+
+  /* Respect reduced-motion */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation-duration: .001ms !important; }
+  }
+
 </style>
 </head>
 <body>
