@@ -344,7 +344,7 @@ def compute_performance_stats(portfolio_df, rebalance_type='monthly', risk_free_
     total_return = values.iloc[-1] / values.iloc[0] - 1
     cagr = (values.iloc[-1] / values.iloc[0]) ** (1 / n_years) - 1 if n_years > 0 else np.nan
 
-    periods_per_year = 12 if rebalance_type == 'monthly' else 4
+    periods_per_year = {'monthly': 12, 'quarterly': 4, 'weekly': 52}.get(rebalance_type, 12)
     ann_vol = returns.std() * np.sqrt(periods_per_year)
     sharpe  = (cagr - risk_free_rate / 100) / ann_vol if ann_vol > 0 else np.nan
 
