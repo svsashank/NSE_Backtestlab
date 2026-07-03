@@ -49,7 +49,7 @@ def _weekly_indicators(daily_close, daily_high, daily_low, config):
 
     # Bollinger upper band
     basis  = w_close.rolling(bb_period).mean()
-    stdev  = w_close.rolling(bb_period).std()
+    stdev  = w_close.rolling(bb_period).std(ddof=0)  # population std (TradingView-standard), not pandas sample default
     bb_upper = basis + bb_std * stdev
 
     # Exit MA
