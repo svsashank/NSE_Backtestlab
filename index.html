@@ -289,6 +289,11 @@
         <div class="s-desc">Near-miss promotion (1 filter within 10%) + hold zone anti-whipsaw (top 25). Vol 80%, CMF 0.05.</div>
         <span class="s-tag">New</span>
       </div>
+      <div class="strategy-card" data-id="s04_milt25" onclick="selectStrategy(this)">
+        <div class="s-name">MILT 25</div>
+        <div class="s-desc">Weekly BB(20,3.7) breakout entry, 25 positions, 4% sizing, -20% hard stop / SMA23 / 1.8×ATR14 trailing exits. MCap &gt;₹1000 Cr only, no other filters.</div>
+        <span class="s-tag">New</span>
+      </div>
     </div>
 
     <div>
@@ -511,6 +516,7 @@ const STRATEGIES = {
   s01_sma_momentum:       { name: 'SMA Momentum',       color: '#6366f1' },
   s02_rsi_composite:      { name: 'RSI Composite',      color: '#22d3ee' },
   s03_near_miss_momentum: { name: 'Near-Miss Momentum', color: '#f59e0b' },
+  s04_milt25:             { name: 'MILT 25',            color: '#ef4444' },
 };
 
 // Defaults matching config_base.json (for display / reset)
