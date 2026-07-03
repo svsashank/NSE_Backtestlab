@@ -57,13 +57,11 @@ def _weekly_indicators(daily_close, daily_high, daily_low, config):
 
     # Weekly ATR (Wilder-style true range on weekly bars, simple rolling mean)
     prev_close = w_close.shift(1)
-    tr = pd.concat([
-        (w_high - w_low).abs(),
-        (w_high - prev_close).abs(),
-        (w_low - prev_close).abs(),
-    ], keys=['a', 'b', 'c'], axis=1)
-    # tr has a MultiIndex on columns (source, ticker); take elementwise max across sources
-    atr = tr.groupby(level=1, axis=1).max().rolling(atr_period).mean()
+    tr1 = (w_high - w_low).abs()
+    tr2 = (w_high - prev_close).abs()
+    tr3 = (w_low - prev_close).abs()
+    tr = np.maximum(np.maximum(tr1, tr2), tr3)   # elementwise max, same shape/index as w_close
+    atr = tr.rolling(atr_period).mean()
 
     roc_12m = (w_close - w_close.shift(roc_period)) / w_close.shift(roc_period) * 100
 
