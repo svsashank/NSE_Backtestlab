@@ -23,6 +23,7 @@ from supabase import create_client
 from core.history_store import load_history, fields_to_raw_multiindex
 from core.indicators    import compute_indicators
 from core.backtest_engine import get_rebalance_dates, run_backtest, compute_performance_stats
+from core.milt25_engine   import run_milt25_backtest
 
 warnings.filterwarnings("ignore")
 
@@ -148,52 +149,72 @@ def main():
     # (point-in-time mcap history not yet stored)
     mcap_data = {t: max(config["min_mcap"] * 10, 1e6) for t in tickers}
 
-    # ── Compute indicators ────────────────────────────────────────────────────
-    print("\nComputing indicators...")
-    ind = compute_indicators(raw, mcap_data, tickers, config)
+    is_milt25 = (strategy_id == "s04_milt25")
 
-    # ── Date window ───────────────────────────────────────────────────────────
-    full_start = ind["close"].index[0]
-    full_end   = ind["close"].index[-1]
-    bt_start   = max(pd.Timestamp(start_date) if start_date else full_start, full_start)
-    bt_end     = min(pd.Timestamp(end_date)   if end_date   else full_end,   full_end)
+    if is_milt25:
+        # ── MILT 25: separate event-driven weekly engine ──────────────────────
+        full_start = history["Close"].index[0]
+        full_end   = history["Close"].index[-1]
+        bt_start   = max(pd.Timestamp(start_date) if start_date else full_start, full_start)
+        bt_end     = min(pd.Timestamp(end_date)   if end_date   else full_end,   full_end)
+        rebalance_type = "weekly"
 
-    print(f"\nBacktest: {bt_start.date()} → {bt_end.date()} ({rebalance_type})")
-    rebalance_dates = get_rebalance_dates(bt_start, bt_end, ind["close"].index, rebalance_type)
-    print(f"{len(rebalance_dates)} rebalance dates")
+        print(f"\nBacktest: {bt_start.date()} → {bt_end.date()} (weekly, MILT 25 engine)")
+        portfolio_df, trades_df, snapshots_df = run_milt25_backtest(
+            history, config, mcap_data, bt_start, bt_end, initial_capital, verbose=True
+        )
+        if len(portfolio_df) < 2:
+            raise RuntimeError("Fewer than 2 weekly periods — widen the date range.")
 
-    if len(rebalance_dates) < 2:
-        raise RuntimeError("Fewer than 2 rebalance dates — widen the date range.")
+        stats = compute_performance_stats(portfolio_df, rebalance_type=rebalance_type,
+                                          risk_free_rate=config.get("risk_free_rate", 0.0))
+    else:
+        # ── Compute indicators ────────────────────────────────────────────────
+        print("\nComputing indicators...")
+        ind = compute_indicators(raw, mcap_data, tickers, config)
 
-    # ── Optional gold sleeve: fetch gold ETF price series ────────────────────
-    gold_prices = None
-    if config.get("gold_allocation", 0.0) > 0:
-        gold_ticker = config.get("gold_ticker", "GOLDBEES.NS")
-        print(f"\nGold sleeve active: {config['gold_allocation']*100:.0f}% in {gold_ticker}")
-        try:
-            import yfinance as yf
-            gdata = yf.download(gold_ticker, start=str(bt_start.date()), end=str((bt_end + pd.Timedelta(days=2)).date()),
-                                auto_adjust=True, progress=False, timeout=30)
-            if gdata is not None and not gdata.empty:
-                close_col = gdata["Close"]
-                if hasattr(close_col, "columns"):   # MultiIndex edge case
-                    close_col = close_col.iloc[:, 0]
-                gold_prices = close_col.dropna()
-                gold_prices.index = pd.to_datetime(gold_prices.index)
-                print(f"   {gold_ticker}: {len(gold_prices)} rows, "
-                      f"{gold_prices.index[0].date()} → {gold_prices.index[-1].date()}")
-            else:
-                print(f"   ⚠ No data returned for {gold_ticker} — gold sleeve will be skipped")
-        except Exception as e:
-            print(f"   ⚠ Gold price fetch failed: {e} — gold sleeve will be skipped")
+        # ── Date window ───────────────────────────────────────────────────────
+        full_start = ind["close"].index[0]
+        full_end   = ind["close"].index[-1]
+        bt_start   = max(pd.Timestamp(start_date) if start_date else full_start, full_start)
+        bt_end     = min(pd.Timestamp(end_date)   if end_date   else full_end,   full_end)
 
-    # ── Run backtest ──────────────────────────────────────────────────────────
-    portfolio_df, trades_df, snapshots_df = run_backtest(
-        ind, config, rebalance_dates, initial_capital, verbose=True, gold_prices=gold_prices
-    )
+        print(f"\nBacktest: {bt_start.date()} → {bt_end.date()} ({rebalance_type})")
+        rebalance_dates = get_rebalance_dates(bt_start, bt_end, ind["close"].index, rebalance_type)
+        print(f"{len(rebalance_dates)} rebalance dates")
 
-    stats = compute_performance_stats(portfolio_df, rebalance_type=rebalance_type,
-                                      risk_free_rate=config.get("risk_free_rate", 0.0))
+        if len(rebalance_dates) < 2:
+            raise RuntimeError("Fewer than 2 rebalance dates — widen the date range.")
+
+        # ── Optional gold sleeve: fetch gold ETF price series ──────────────────
+        gold_prices = None
+        if config.get("gold_allocation", 0.0) > 0:
+            gold_ticker = config.get("gold_ticker", "GOLDBEES.NS")
+            print(f"\nGold sleeve active: {config['gold_allocation']*100:.0f}% in {gold_ticker}")
+            try:
+                import yfinance as yf
+                gdata = yf.download(gold_ticker, start=str(bt_start.date()), end=str((bt_end + pd.Timedelta(days=2)).date()),
+                                    auto_adjust=True, progress=False, timeout=30)
+                if gdata is not None and not gdata.empty:
+                    close_col = gdata["Close"]
+                    if hasattr(close_col, "columns"):   # MultiIndex edge case
+                        close_col = close_col.iloc[:, 0]
+                    gold_prices = close_col.dropna()
+                    gold_prices.index = pd.to_datetime(gold_prices.index)
+                    print(f"   {gold_ticker}: {len(gold_prices)} rows, "
+                          f"{gold_prices.index[0].date()} → {gold_prices.index[-1].date()}")
+                else:
+                    print(f"   ⚠ No data returned for {gold_ticker} — gold sleeve will be skipped")
+            except Exception as e:
+                print(f"   ⚠ Gold price fetch failed: {e} — gold sleeve will be skipped")
+
+        # ── Run backtest ─────────────────────────────────────────────────────
+        portfolio_df, trades_df, snapshots_df = run_backtest(
+            ind, config, rebalance_dates, initial_capital, verbose=True, gold_prices=gold_prices
+        )
+
+        stats = compute_performance_stats(portfolio_df, rebalance_type=rebalance_type,
+                                          risk_free_rate=config.get("risk_free_rate", 0.0))
 
     print("\nPerformance:")
     for k, v in stats.items():
