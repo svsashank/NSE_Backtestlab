@@ -152,6 +152,20 @@ def main():
     is_milt25 = (strategy_id == "s04_milt25")
 
     if is_milt25:
+        # MILT 25 is a standalone system — strip every legacy screener_engine
+        # filter key (ADV, RSI, CMF, volatility, sma_buffer, max_from_high,
+        # sma_short/long, rsi_period, etc.) so they don't ride along into the
+        # saved params blob and get misrepresented as active filters in the GUI.
+        milt25_keys = {
+            "min_mcap", "portfolio_size", "alloc_pct", "hard_stop_pct",
+            "bb_period", "bb_std", "exit_ma_period", "atr_period",
+            "atr_multiplier", "roc_period_weeks", "cost_buy", "cost_sell",
+            "risk_free_rate",
+        }
+        clean_config = {k: v for k, v in config.items() if k in milt25_keys}
+        config = clean_config
+
+    if is_milt25:
         # ── MILT 25: separate event-driven weekly engine ──────────────────────
         full_start = history["Close"].index[0]
         full_end   = history["Close"].index[-1]
