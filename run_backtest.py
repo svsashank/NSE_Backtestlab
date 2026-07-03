@@ -165,6 +165,37 @@ def main():
         clean_config = {k: v for k, v in config.items() if k in milt25_keys}
         config = clean_config
 
+        # Real MCap filter: the generic `mcap_data` placeholder above is a
+        # constant that makes MCap a no-op for every ticker (fine for
+        # S01-S03, which additionally rely on ADV/RSI/volatility/CMF to
+        # implicitly weed out illiquid names — but MILT25 has NO other
+        # filter, so a fake MCap gate lets the whole 2365-stock universe
+        # through, including illiquid microcaps). Compute real static
+        # MCap = shares_outstanding x latest close, sourced from the live
+        # screener's weekly-cached shares file.
+        try:
+            import urllib.request
+            shares_url = ("https://raw.githubusercontent.com/svsashank/"
+                          "NSE_1000Cr_Momentum/main/shares_outstanding.json")
+            with urllib.request.urlopen(shares_url, timeout=20) as resp:
+                shares_data = json.loads(resp.read().decode())
+            shares = shares_data.get("shares", {})
+            latest_close = history["Close"].iloc[-1]
+            real_mcap = {}
+            for t in tickers:
+                sh = shares.get(t)
+                px = latest_close.get(t)
+                if sh is not None and px is not None and pd.notna(px):
+                    real_mcap[t] = (sh * px) / 1e7   # ₹ Cr
+            mcap_data = real_mcap
+            print(f"\nReal MCap filter loaded: {len(real_mcap)} tickers priced, "
+                  f"{sum(1 for v in real_mcap.values() if v > config['min_mcap'])} "
+                  f"pass MCap > ₹{config['min_mcap']} Cr")
+        except Exception as e:
+            print(f"⚠ Could not load real shares_outstanding.json ({e}) — "
+                  f"falling back to permissive MCap placeholder. Universe will "
+                  f"NOT be properly filtered by MCap!")
+
     if is_milt25:
         # ── MILT 25: separate event-driven weekly engine ──────────────────────
         full_start = history["Close"].index[0]
