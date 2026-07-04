@@ -5,15 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NSE Backtest Lab</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@1,6..72,400..600&family=IBM+Plex+Mono:wght@400;500;600&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0e1013; --surface: #14161b; --surface2: #1a1d24;
-    --border: #262a33; --accent: #c9a961; --accent2: #e0c98a;
-    --green: #4ec98f; --red: #e0655f; --yellow: #d9a13d;
-    --text: #e8e4d8; --muted: #8b8f9a; --card: #181b22;
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+    --border: #2e3250; --accent: #6366f1; --accent2: #22d3ee;
+    --green: #10b981; --red: #ef4444; --yellow: #f59e0b;
+    --text: #e2e8f0; --muted: #64748b; --card: #1e2235;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; font-size: 14px; min-height: 100vh; }
@@ -42,10 +39,10 @@
 
   .strategy-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; cursor: pointer; transition: all 0.2s; margin-bottom: 8px; }
   .strategy-card:hover { border-color: var(--accent); }
-  .strategy-card.active { border-color: var(--accent); background: rgba(201,169,97,0.1); }
+  .strategy-card.active { border-color: var(--accent); background: rgba(99,102,241,0.1); }
   .strategy-card .s-name { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
   .strategy-card .s-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
-  .strategy-card .s-tag { display: inline-block; background: rgba(201,169,97,0.15); color: var(--accent); font-size: 10px; padding: 2px 7px; border-radius: 4px; margin-top: 6px; font-weight: 600; }
+  .strategy-card .s-tag { display: inline-block; background: rgba(99,102,241,0.15); color: var(--accent); font-size: 10px; padding: 2px 7px; border-radius: 4px; margin-top: 6px; font-weight: 600; }
 
   .run-btn { width: 100%; padding: 12px; background: var(--accent); color: white; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px; }
   .run-btn:hover { background: #4f46e5; transform: translateY(-1px); }
@@ -74,10 +71,10 @@
   .overrides-header .oh-left { display: flex; align-items: center; gap: 8px; }
   .overrides-header .oh-title { font-size: 12px; font-weight: 600; color: var(--text); }
   .overrides-header .oh-badge {
-    font-size: 10px; background: rgba(201,169,97,0.18); color: var(--accent);
+    font-size: 10px; background: rgba(99,102,241,0.18); color: var(--accent);
     padding: 2px 6px; border-radius: 4px; font-weight: 700;
   }
-  .overrides-header .oh-badge.active { background: rgba(224,201,138,0.18); color: var(--accent2); }
+  .overrides-header .oh-badge.active { background: rgba(34,211,238,0.18); color: var(--accent2); }
   .overrides-chevron { color: var(--muted); font-size: 11px; transition: transform 0.2s; }
   .overrides-chevron.open { transform: rotate(180deg); }
   .overrides-body { display: none; padding: 14px 0 0; }
@@ -88,7 +85,7 @@
   .filter-field label { font-size: 11px; color: var(--muted); margin-bottom: 4px; display: flex; justify-content: space-between; }
   .filter-field label span { color: #475569; font-weight: 400; font-size: 10px; }
   .filter-field input { padding: 6px 10px; font-size: 12px; }
-  .filter-field input.modified { border-color: var(--accent2); background: rgba(224,201,138,0.05); }
+  .filter-field input.modified { border-color: var(--accent2); background: rgba(34,211,238,0.05); }
 
   .reset-overrides-btn {
     margin-top: 10px; width: 100%; padding: 7px; background: none; border: 1px solid var(--border);
@@ -135,9 +132,9 @@
   .params-pills { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 2px; }
   .params-pill {
     font-size: 10px; padding: 2px 7px; border-radius: 4px;
-    background: rgba(201,169,97,0.1); color: var(--accent); border: 1px solid rgba(201,169,97,0.2);
+    background: rgba(99,102,241,0.1); color: var(--accent); border: 1px solid rgba(99,102,241,0.2);
   }
-  .params-pill.custom { background: rgba(224,201,138,0.1); color: var(--accent2); border-color: rgba(224,201,138,0.2); }
+  .params-pill.custom { background: rgba(34,211,238,0.1); color: var(--accent2); border-color: rgba(34,211,238,0.2); }
 
   /* Compare bar */
   .compare-bar { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -146,7 +143,7 @@
   .compare-table th { background: var(--surface2); padding: 8px 12px; text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
   .compare-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
   .compare-table tr:last-child td { border-bottom: none; }
-  .compare-table tr:hover td { background: rgba(201,169,97,0.05); }
+  .compare-table tr:hover td { background: rgba(99,102,241,0.05); }
 
   .empty-state { text-align: center; color: var(--muted); padding: 60px 20px; }
   .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
@@ -156,7 +153,7 @@
   .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
   .data-table th { background: var(--surface2); padding: 7px 10px; text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; position: sticky; top: 0; }
   .data-table td { padding: 6px 10px; border-bottom: 1px solid rgba(46,50,80,0.5); }
-  .data-table tr:hover td { background: rgba(201,169,97,0.04); }
+  .data-table tr:hover td { background: rgba(99,102,241,0.04); }
   .buy { color: var(--green); font-weight: 600; }
   .sell { color: var(--red); font-weight: 600; }
   .trim { color: var(--yellow); font-weight: 600; }
@@ -193,8 +190,8 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     background:
-      radial-gradient(1100px 560px at 100% -10%, rgba(224,201,138,.08), transparent 60%),
-      radial-gradient(900px 500px at -8% 0%, rgba(201,169,97,.10), transparent 55%),
+      radial-gradient(1100px 560px at 100% -10%, rgba(34,211,238,.08), transparent 60%),
+      radial-gradient(900px 500px at -8% 0%, rgba(99,102,241,.10), transparent 55%),
       var(--bg);
     background-attachment: fixed;
   }
@@ -204,11 +201,11 @@
   .header { position: sticky; top: 0; z-index: 30; backdrop-filter: blur(8px); box-shadow: 0 4px 18px rgba(0,0,0,.22); }
 
   /* Focus ring on inputs */
-  select:focus, input:focus { box-shadow: 0 0 0 3px rgba(201,169,97,.18); }
+  select:focus, input:focus { box-shadow: 0 0 0 3px rgba(99,102,241,.18); }
 
   /* Button depth */
-  .run-btn { box-shadow: 0 4px 14px rgba(201,169,97,.30); }
-  .run-btn:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(201,169,97,.42); }
+  .run-btn { box-shadow: 0 4px 14px rgba(99,102,241,.30); }
+  .run-btn:hover:not(:disabled) { box-shadow: 0 6px 20px rgba(99,102,241,.42); }
   .run-btn:active:not(:disabled) { transform: translateY(0); }
 
   /* Card depth */
@@ -259,123 +256,13 @@
     *, *::before, *::after { transition: none !important; animation-duration: .001ms !important; }
   }
 
-
-/* ═══ Refinement layer — financial-press quant terminal ═══ */
-:root { --font-ui:'Instrument Sans',system-ui,sans-serif; --font-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace; --font-display:'Newsreader',Georgia,serif; --acc:#c9a961; --acc2:#e0c98a; }
-html { color-scheme: dark; }
-body {
-  font-family: var(--font-ui);
-  background:
-    radial-gradient(900px 480px at 85% -140px, color-mix(in srgb, var(--acc) 6%, transparent), transparent 70%),
-    var(--bg);
-}
-/* Masthead */
-.header h1, header h1 {
-  font-family: var(--font-display); font-style: italic; font-weight: 500;
-  font-size: 21px; letter-spacing: .01em; color: var(--text);
-  background: none; -webkit-text-fill-color: var(--text);
-}
-.header h1 span, header h1 span {
-  font-family: var(--font-mono); font-style: normal; font-weight: 500;
-  font-size: 10px; text-transform: uppercase; letter-spacing: .18em;
-  color: var(--acc); border: 1px solid color-mix(in srgb, var(--acc) 35%, transparent);
-  border-radius: 3px; padding: 3px 8px; margin-left: 10px; vertical-align: 3px;
-  -webkit-text-fill-color: var(--acc);
-}
-.header, header {
-  border-bottom: 1px solid var(--border);
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--acc) 16%, transparent);
-}
-.header .subtitle, header .run-meta, .run-meta { font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; }
-/* Tabs */
-.tabs .tab, nav button {
-  font-family: var(--font-mono); font-size: 11px; font-weight: 500;
-  text-transform: uppercase; letter-spacing: .12em;
-}
-/* Section labels */
-.section-title, .table-title {
-  font-family: var(--font-mono); font-size: 10px; font-weight: 500;
-  text-transform: uppercase; letter-spacing: .16em; color: var(--muted);
-}
-.section-title::before, .table-title::before {
-  content: ''; display: inline-block; width: 14px; height: 1px;
-  background: var(--acc); vertical-align: middle; margin-right: 8px;
-}
-/* Tables: mono numerals, hairline rows, accent hover wash */
-table th {
-  font-family: var(--font-mono); font-size: 10px; font-weight: 500;
-  text-transform: uppercase; letter-spacing: .13em; color: var(--muted);
-}
-table td { font-family: var(--font-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; }
-tbody tr:hover td { background: color-mix(in srgb, var(--acc) 5%, transparent); }
-.ticker-cell { font-family: var(--font-mono); font-weight: 600; letter-spacing: .02em; }
-.rank { font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: 15px; color: var(--acc); }
-/* Stat values */
-.stat .val, .stat-card .value, .stat .value { font-family: var(--font-mono); font-weight: 500; letter-spacing: -0.01em; }
-.stat .lbl, .stat-card .label {
-  font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .14em;
-}
-/* Primary action buttons: brushed metal on ink */
-#runBtn, .run-btn, .btn, button.run-btn {
-  background: var(--acc); background-image: none; color: #101216;
-  font-family: var(--font-mono); font-size: 12px; font-weight: 600;
-  letter-spacing: .07em; text-transform: uppercase; border: none; border-radius: 4px;
-}
-#runBtn:hover:not(:disabled), .run-btn:hover:not(:disabled), .btn:hover:not(:disabled) { filter: brightness(1.09); }
-#runBtn .spinner { border-color: rgba(0,0,0,.25); border-top-color: #101216; }
-/* Inputs */
-input, select, textarea { font-family: var(--font-mono); font-size: 12.5px; }
-input:focus, select:focus, textarea:focus { border-color: var(--acc) !important; }
-/* Badges & pills */
-.badge, .params-pill, .chip, .action-pill, .config-pill { font-family: var(--font-mono); letter-spacing: .03em; }
-/* Scrollbars */
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: #262a33; border-radius: 5px; border: 2px solid var(--bg); }
-::-webkit-scrollbar-track { background: transparent; }
-/* Accessibility */
-:focus-visible { outline: 1px solid var(--acc); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
-}
-
-/* ═══ Mobile & robustness hardening ═══ */
-/* Data columns read in high-contrast ivory; accent is reserved for chrome */
-.ticker-cell { color: var(--text) !important; font-weight: 500; }
-td.rank, .rank {
-  font-family: var(--font-mono); font-style: normal;
-  font-size: 11px; color: var(--muted);
-}
-/* Action buttons: explicit dark label, fixed height, no legacy glow */
-#runBtn, .run-btn, .btn { min-height: 40px; box-shadow: none; }
-#runBtn, #runBtn *, .run-btn, .run-btn *, button.btn, button.btn * {
-  color: #14161b !important; -webkit-text-fill-color: #14161b !important;
-}
-#runBtn .spinner { border-color: rgba(0,0,0,.25); border-top-color: #14161b; }
-.run-status { color: var(--muted); }
-/* Simple rgba fallbacks replace color-mix in critical paths */
-body { background: radial-gradient(900px 480px at 85% -140px, rgba(201,169,97,.06), transparent 70%), var(--bg); }
-.header h1 span, header h1 span { border-color: rgba(201,169,97,.35); }
-.header, header { box-shadow: 0 1px 0 rgba(201,169,97,.16); }
-tbody tr:hover td { background: rgba(201,169,97,.05); }
-/* Small screens */
-@media (max-width: 640px) {
-  .header h1, header h1 { font-size: 19px; line-height: 1.3; }
-  .header h1 span, header h1 span {
-    display: inline-block; margin: 6px 8px 0 0; vertical-align: 0;
-  }
-  th { padding: 9px 8px; }
-  td { padding: 10px 8px; font-size: 12px; }
-  .tbl-wrap, .table-wrap, .chart-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .tbl-wrap table, .table-wrap table { min-width: 660px; }
-  #runBtn, .run-btn { width: 100%; justify-content: center; }
-}
 </style>
 </head>
 <body>
 
 <div class="header">
   <div>
-    <h1>NSE Backtest <span>Lab</span></h1>
+    <h1>⚗️ NSE Backtest Lab</h1>
     <div class="subtitle">Strategy research on NSE 2365-stock universe · Supabase + GitHub Actions</div>
   </div>
 </div>
@@ -623,13 +510,13 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const GH_REPO     = 'svsashank/NSE_Backtestlab';
 const GH_WORKFLOW = 'run_backtest.yml';
 
-const PALETTE = ['#c9a961','#e0c98a','#4ec98f','#d9a13d','#e0655f','#a48fd6'];
+const PALETTE = ['#6366f1','#22d3ee','#10b981','#f59e0b','#ef4444','#a78bfa'];
 
 const STRATEGIES = {
-  s01_sma_momentum:       { name: 'SMA Momentum',       color: '#c9a961' },
-  s02_rsi_composite:      { name: 'RSI Composite',      color: '#e0c98a' },
-  s03_near_miss_momentum: { name: 'Near-Miss Momentum', color: '#d9a13d' },
-  s04_milt25:             { name: 'MILT 25',            color: '#e0655f' },
+  s01_sma_momentum:       { name: 'SMA Momentum',       color: '#6366f1' },
+  s02_rsi_composite:      { name: 'RSI Composite',      color: '#22d3ee' },
+  s03_near_miss_momentum: { name: 'Near-Miss Momentum', color: '#f59e0b' },
+  s04_milt25:             { name: 'MILT 25',            color: '#ef4444' },
 };
 
 // Defaults matching config_base.json (for display / reset)
@@ -848,7 +735,7 @@ function renderRuns(runs) {
   }
   grid.innerHTML = runs.map((r, i) => {
     const p = r.performance || {};
-    const strat = STRATEGIES[r.strategy_id] || { name: r.strategy_name || r.strategy_id, color: '#c9a961' };
+    const strat = STRATEGIES[r.strategy_id] || { name: r.strategy_name || r.strategy_id, color: '#6366f1' };
     const cagr = p.cagr != null ? (p.cagr * 100).toFixed(1) + '%' : '—';
     const sharpe = p.sharpe != null ? p.sharpe.toFixed(2) : '—';
     const dd = p.max_drawdown != null ? (p.max_drawdown * 100).toFixed(1) + '%' : '—';
@@ -927,7 +814,7 @@ async function toggleDetail(id) {
 function drawMiniChart(id, curve, stratId) {
   const ctx = document.getElementById(`chart-${id}`);
   if (!ctx) return;
-  const strat = STRATEGIES[stratId] || { color: '#c9a961' };
+  const strat = STRATEGIES[stratId] || { color: '#6366f1' };
   const labels = curve.map(d => d.date);
   const values = curve.map(d => d.value);
   detailCharts[id] = new Chart(ctx, {
@@ -950,8 +837,8 @@ function drawMiniChart(id, curve, stratId) {
         callbacks: { label: ctx => '₹' + Number(ctx.parsed.y).toLocaleString() }
       }},
       scales: {
-        x: { ticks: { color: '#8b8f9a', maxTicksLimit: 6, font: { size: 10 } }, grid: { color: '#262a33' } },
-        y: { ticks: { color: '#8b8f9a', font: { size: 10 }, callback: v => '₹' + (v/1e5).toFixed(0) + 'L' }, grid: { color: '#262a33' } }
+        x: { ticks: { color: '#64748b', maxTicksLimit: 6, font: { size: 10 } }, grid: { color: '#2e3250' } },
+        y: { ticks: { color: '#64748b', font: { size: 10 }, callback: v => '₹' + (v/1e5).toFixed(0) + 'L' }, grid: { color: '#2e3250' } }
       }
     }
   });
@@ -1037,12 +924,12 @@ async function renderCompare() {
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: {
-        legend: { display: true, position: 'top', labels: { color: '#e8e4d8', font: { size: 11 }, boxWidth: 12 } },
+        legend: { display: true, position: 'top', labels: { color: '#e2e8f0', font: { size: 11 }, boxWidth: 12 } },
         tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ₹${Number(ctx.parsed.y).toLocaleString()}` }}
       },
       scales: {
-        x: { type: 'category', ticks: { color: '#8b8f9a', maxTicksLimit: 8, font: { size: 10 } }, grid: { color: '#262a33' } },
-        y: { ticks: { color: '#8b8f9a', font: { size: 10 }, callback: v => '₹' + (v/1e5).toFixed(0) + 'L' }, grid: { color: '#262a33' } }
+        x: { type: 'category', ticks: { color: '#64748b', maxTicksLimit: 8, font: { size: 10 } }, grid: { color: '#2e3250' } },
+        y: { ticks: { color: '#64748b', font: { size: 10 }, callback: v => '₹' + (v/1e5).toFixed(0) + 'L' }, grid: { color: '#2e3250' } }
       }
     }
   });
