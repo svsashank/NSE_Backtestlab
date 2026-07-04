@@ -72,6 +72,22 @@ def _weekly_indicators(daily_close, daily_high, daily_low, config):
     }
 
 
+def _mark_price(w_close, daily_close, ticker, friday, fallback):
+    """Mark-to-market price for `ticker` at `friday`. Series.get() returns
+    NaN (not the default) when the date exists but the value is NaN — e.g.
+    a suspended/thin ticker with a missing week — which would poison the
+    whole equity number. Fall back to the last valid daily close at/before
+    `friday`, then to `fallback` (entry price)."""
+    p = w_close[ticker].get(friday, np.nan) if ticker in w_close.columns else np.nan
+    if pd.notna(p):
+        return float(p)
+    if ticker in daily_close.columns:
+        s = daily_close[ticker].loc[:friday].dropna()
+        if len(s):
+            return float(s.iloc[-1])
+    return float(fallback)
+
+
 def _next_trading_day_price(daily_close, all_days, friday_date):
     """Approximate 'Monday Open' execution price: Close of the next trading
     day strictly after `friday_date`. Returns (exec_date, price_row) or
@@ -107,7 +123,7 @@ def run_milt25_backtest(raw_fields, config, mcap_data, start_date, end_date,
     hard_stop_pct   = config.get('hard_stop_pct', 0.20)
 
     eligible_universe = {t for t, m in mcap_data.items()
-                         if m is not None and m > min_mcap and t in daily_close.columns}
+                         if m is not None and m >= min_mcap and t in daily_close.columns}
 
     if verbose:
         print(f"MILT 25: {len(eligible_universe)} tickers eligible (MCap > ₹{min_mcap} Cr)")
@@ -167,11 +183,18 @@ def run_milt25_backtest(raw_fields, config, mcap_data, start_date, end_date,
             p = price_row.get(ticker, np.nan)
             if pd.isna(p):
                 p = w_close[ticker].get(friday, np.nan)  # fallback to signal-week close
-            if pd.notna(p):
-                pos = holdings[ticker]
-                capital += pos['shares'] * p * (1 - config.get('cost_sell', 0.001))
-                trade_log.append({'date': exec_date, 'ticker': ticker, 'action': f'SELL_{reason}',
-                                  'price': p, 'shares': pos['shares']})
+            if pd.isna(p):
+                # last valid daily close at/before the signal Friday
+                p = _mark_price(w_close, daily_close, ticker, friday, np.nan)
+            if pd.isna(p):
+                # No usable price anywhere — keep the position open and retry
+                # next week rather than deleting it with zero cash credited
+                # (which would silently vaporise the position's entire value).
+                continue
+            pos = holdings[ticker]
+            capital += pos['shares'] * p * (1 - config.get('cost_sell', 0.001))
+            trade_log.append({'date': exec_date, 'ticker': ticker, 'action': f'SELL_{reason}',
+                              'price': p, 'shares': pos['shares']})
             del holdings[ticker]
 
         # ── Entry signals (evaluated on Friday close) ────────────────────────
@@ -195,7 +218,8 @@ def run_milt25_backtest(raw_fields, config, mcap_data, start_date, end_date,
         # Mark-to-market equity (for 4%-of-current-equity sizing) using
         # Friday close, before executing this week's new buys
         equity_now = capital + sum(
-            holdings[t]['shares'] * w_close[t].get(friday, holdings[t]['entry_price'])
+            holdings[t]['shares'] * _mark_price(w_close, daily_close, t, friday,
+                                                holdings[t]['entry_price'])
             for t in holdings
         )
 
@@ -220,7 +244,8 @@ def run_milt25_backtest(raw_fields, config, mcap_data, start_date, end_date,
 
         # ── Snapshot at Friday close (mark-to-market, post this week's trades) ──
         portfolio_value = capital + sum(
-            holdings[t]['shares'] * w_close[t].get(friday, holdings[t]['entry_price'])
+            holdings[t]['shares'] * _mark_price(w_close, daily_close, t, friday,
+                                                holdings[t]['entry_price'])
             for t in holdings
         )
         portfolio_values.append({'date': friday, 'value': portfolio_value})
