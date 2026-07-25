@@ -1,15 +1,15 @@
 {
   "strategy_id": "s05_velocity_momentum",
   "strategy_name": "Velocity Momentum",
-  "rebalance_freq": "monthly",
+  "rebalance_freq": "weekly",
   "date_range_start": "2018-07-02",
   "date_range_end": "2026-07-01",
-  "run_id": "9994922f-3165-4dab-b72c-1eff194d9158",
+  "run_id": "be1a8ea8-0e3d-4e96-954c-ac24f1891666",
   "performance": {
     "cagr": 0.18318180960562014,
     "total_return": 2.838944814020891,
-    "ann_volatility": 0.22010692513896504,
-    "sharpe": 0.5369290835851973,
+    "ann_volatility": 0.45818910230882093,
+    "sharpe": 0.2579323886362649,
     "max_drawdown": -0.36600474116773896,
     "win_rate": 0.6458333333333334,
     "years": 7.997262149212868
