@@ -1,5 +1,8 @@
 name: Run Backtest
 
+permissions:
+  contents: write
+
 on:
   workflow_dispatch:
     inputs:
@@ -29,3 +32,10 @@ jobs:
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
           BT_PARAMS:    ${{ github.event.inputs.BT_PARAMS }}
         run: python run_backtest.py
+
+      - name: Commit diagnostic summary
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add diagnostic_output/ || true
+          git diff --cached --quiet || (git commit -m "Diagnostic summary [skip ci]" && git push)

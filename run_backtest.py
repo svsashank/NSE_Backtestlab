@@ -285,6 +285,22 @@ def main():
     resp   = supabase.table("backtest_results").insert(row).execute()
     run_id = resp.data[0]["id"] if resp.data else None
     print(f"✅ backtest_results → id: {run_id}")
+
+    # Lightweight summary file committed to repo (diagnostic aid — bypasses
+    # needing direct Supabase/log access to inspect results post-hoc)
+    summary = {
+        "strategy_id": strategy_id,
+        "strategy_name": strategy.STRATEGY_NAME,
+        "rebalance_freq": rebalance_type,
+        "date_range_start": str(bt_start.date()),
+        "date_range_end": str(bt_end.date()),
+        "run_id": run_id,
+        "performance": {k: clean(v) for k, v in stats.items()},
+    }
+    os.makedirs("diagnostic_output", exist_ok=True)
+    with open(f"diagnostic_output/{strategy_id}.json", "w") as f:
+        json.dump(summary, f, indent=2)
+
     print(f"\nDone in {(time.time()-t0)/60:.1f} min")
 
 
