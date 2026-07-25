@@ -1,15 +1,15 @@
 {
   "strategy_id": "s03_near_miss_momentum",
   "strategy_name": "Near-Miss Momentum",
-  "rebalance_freq": "monthly",
+  "rebalance_freq": "weekly",
   "date_range_start": "2018-07-02",
   "date_range_end": "2026-07-01",
-  "run_id": "58da3162-e3a2-4e9b-ac56-c27f613bb4ab",
+  "run_id": "b43b2d2c-dc0e-40ff-a21f-bce1bf7120ad",
   "performance": {
     "cagr": 0.3404870005402527,
     "total_return": 9.417234195825817,
-    "ann_volatility": 0.28239489445664623,
-    "sharpe": 0.9755381770280056,
+    "ann_volatility": 0.5878518502132276,
+    "sharpe": 0.46863338176162433,
     "max_drawdown": -0.33024943889566893,
     "win_rate": 0.7395833333333334,
     "years": 7.997262149212868
