@@ -17,6 +17,15 @@ Required config keys (in addition to the screener_engine keys):
                          anything not in the fresh top-N, matching the
                          original notebook's behaviour)
     risk_free_rate      annual %, used to accrue returns on uninvested cash
+    trim_band           optional (default 0). Overweight positions are only
+                         trimmed back to equal weight when they exceed the
+                         slot value by more than this fraction (e.g. 0.25 =
+                         trim only above 125% of slot). Cuts churn on frequent
+                         rebalances. 0 = original behaviour (trim any excess).
+
+Daily mark-to-market: portfolio_df.attrs['daily'] holds a daily equity Series
+(holdings frozen between rebalances, cash accruing at risk_free_rate) so
+drawdown/volatility are comparable across rebalance frequencies.
 
 Optional gold sleeve (static asset allocation overlay):
     gold_allocation      fraction of portfolio (0-1) permanently held in a
@@ -45,6 +54,13 @@ def get_rebalance_dates(start, end, price_index, rebalance_type='monthly'):
     if rebalance_type == 'quarterly':
         grouped = in_range.to_frame().groupby([in_range.year, in_range.month]).first()
         starts  = grouped[grouped.index.get_level_values(1).isin([1, 4, 7, 10])].values.flatten()
+    elif rebalance_type in ('weekly', 'biweekly'):
+        # First trading day of each ISO week; biweekly keeps every other one
+        iso = in_range.isocalendar()
+        starts = in_range.to_frame().groupby([iso.year.values, iso.week.values]).first().values.flatten()
+        starts = np.sort(starts)
+        if rebalance_type == 'biweekly':
+            starts = starts[::2]
     else:
         starts = in_range.to_frame().groupby([in_range.year, in_range.month]).first().values.flatten()
 
@@ -103,6 +119,7 @@ def run_backtest(ind, config, rebalance_dates, initial_capital,
     retention_rank       = config.get('retention_rank', 0)
     risk_free_rate       = config.get('risk_free_rate', 0.0)
     no_trim              = config.get('no_trim', False)   # if True, winners are never trimmed back to equal weight
+    trim_band            = float(config.get('trim_band', 0.0) or 0.0)
 
     gold_allocation = float(config.get('gold_allocation', 0.0) or 0.0)
     gold_allocation = min(max(gold_allocation, 0.0), 1.0)  # clamp to [0, 1]
@@ -122,6 +139,7 @@ def run_backtest(ind, config, rebalance_dates, initial_capital,
     cash_periods     = 0
 
     portfolio_values, snapshots, trade_log = [], [], []
+    daily_states = []   # (rebal_date, capital, {ticker: shares}, gold_shares) after each rebalance
     all_trading_days = ind['close'].index
 
     for i, rebal_date in enumerate(rebalance_dates):
@@ -254,7 +272,7 @@ def run_backtest(ind, config, rebalance_dates, initial_capital,
                     if pd.isna(p):
                         continue
                     excess = holdings[ticker]['shares'] * p - value_per_slot
-                    if excess > p:
+                    if excess > max(p, value_per_slot * trim_band):
                         trim = int(excess / p)
                         if trim > 0:
                             capital += trim * p * (1 - cost_sell)
@@ -312,8 +330,12 @@ def run_backtest(ind, config, rebalance_dates, initial_capital,
             'rej_cmf'        : rejections.get('cmf', 0),
         })
         prev_rebal_date = rebal_date
+        daily_states.append((rebal_date, capital,
+                             {t: h['shares'] for t, h in holdings.items()}, gold_shares))
 
     portfolio_df = pd.DataFrame(portfolio_values).set_index('date')
+    portfolio_df.attrs['daily'] = _daily_equity(ind['close'], daily_states, daily_cash_return,
+                                                gold_prices if gold_active else None)
     trades_df    = pd.DataFrame(trade_log)
     snapshots_df = pd.DataFrame(snapshots).set_index('date')
 
@@ -331,6 +353,34 @@ def run_backtest(ind, config, rebalance_dates, initial_capital,
     return portfolio_df, trades_df, snapshots_df
 
 
+def _daily_equity(close, states, daily_cash_return, gold_prices=None):
+    """Mark the portfolio to market every trading day between rebalances.
+    Holdings are frozen at their post-rebalance share counts; cash accrues
+    at the risk-free rate. Prices are ffilled (suspended stocks hold value)."""
+    if not states:
+        return pd.Series(dtype=float)
+    close_ff = close.ffill()
+    days = close.index[(close.index >= states[0][0])]
+    out = []
+    for k, (d0, cash, shares, g_sh) in enumerate(states):
+        if k + 1 < len(states):
+            seg = days[(days >= d0) & (days < states[k + 1][0])]
+        else:
+            seg = days[days >= d0]
+        if len(seg) == 0:
+            continue
+        tick = [t for t in shares if t in close.columns]
+        px = close_ff.loc[seg, tick]
+        eq = (px * pd.Series(shares)[tick]).sum(axis=1, min_count=0) if tick else pd.Series(0.0, index=seg)
+        cash_path = cash * (1 + daily_cash_return) ** np.arange(len(seg))
+        val = eq.values + cash_path
+        if gold_prices is not None and g_sh:
+            gp = gold_prices.reindex(seg, method='ffill').fillna(0.0).values
+            val = val + g_sh * gp
+        out.append(pd.Series(val, index=seg))
+    return pd.concat(out) if out else pd.Series(dtype=float)
+
+
 # ── Performance metrics ──────────────────────────────────────────────────────
 def compute_performance_stats(portfolio_df, rebalance_type='monthly', risk_free_rate=0.0):
     """
@@ -344,7 +394,7 @@ def compute_performance_stats(portfolio_df, rebalance_type='monthly', risk_free_
     total_return = values.iloc[-1] / values.iloc[0] - 1
     cagr = (values.iloc[-1] / values.iloc[0]) ** (1 / n_years) - 1 if n_years > 0 else np.nan
 
-    periods_per_year = {'monthly': 12, 'quarterly': 4, 'weekly': 52}.get(rebalance_type, 12)
+    periods_per_year = {'monthly': 12, 'quarterly': 4, 'weekly': 52, 'biweekly': 26}.get(rebalance_type, 12)
     ann_vol = returns.std() * np.sqrt(periods_per_year)
     sharpe  = (cagr - risk_free_rate / 100) / ann_vol if ann_vol > 0 else np.nan
 

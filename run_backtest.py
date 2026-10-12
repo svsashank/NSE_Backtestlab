@@ -24,6 +24,7 @@ from core.history_store import load_history, fields_to_raw_multiindex
 from core.indicators    import compute_indicators
 from core.backtest_engine import get_rebalance_dates, run_backtest, compute_performance_stats
 from core.milt25_engine   import run_milt25_backtest
+from core.trade_metrics   import all_metrics
 
 warnings.filterwarnings("ignore")
 
@@ -105,10 +106,11 @@ def main():
     config["rank_fn"] = strategy.rank_fn       # inject callable — not serialisable
 
     # Allow GUI to override numeric params (on top of strategy overrides)
-    int_keys  = ["portfolio_size", "sma_short", "sma_long", "min_stocks_to_invest", "retention_rank"]
+    int_keys  = ["portfolio_size", "sma_short", "sma_long", "min_stocks_to_invest", "retention_rank",
+                 "hold_zone_size", "whipsaw_days"]
     bool_keys = ["no_trim"]
     str_keys  = ["gold_ticker"]
-    skip_keys = {"strategy_id", "rebalance_type", "initial_capital", "start_date", "end_date"}
+    skip_keys = {"strategy_id", "rebalance_type", "initial_capital", "start_date", "end_date", "run_label"}
     for k, v in params.items():
         if k in skip_keys or v is None or v == "":
             continue
@@ -122,9 +124,11 @@ def main():
                 config[k] = int(v)
             else:
                 config[k] = float(v)
-        elif k == "gold_allocation":
-            # not in BASE_CONFIG by default — accept it directly (0-1 fraction)
+        elif k in ("gold_allocation", "trim_band"):
+            # not in BASE_CONFIG by default — accept directly (fractions)
             config[k] = float(v)
+        elif k in ("hold_zone_size", "whipsaw_days"):
+            config[k] = int(v)
     # Always pass no_trim even if not in base config
     if "no_trim" in params:
         v = params["no_trim"]
@@ -133,6 +137,10 @@ def main():
     # Gold sleeve defaults
     config.setdefault("gold_allocation", 0.0)
     config.setdefault("gold_ticker", "GOLDBEES.NS")
+
+    run_label = str(params.get("run_label") or "").strip()
+    if hasattr(strategy, "configure"):
+        strategy.configure(config)
 
     # ── Load OHLCV history ────────────────────────────────────────────────────
     supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -260,6 +268,15 @@ def main():
 
         stats = compute_performance_stats(portfolio_df, rebalance_type=rebalance_type,
                                           risk_free_rate=config.get("risk_free_rate", 0.0))
+        try:
+            stats.update(all_metrics(portfolio_df, trades_df, config))
+        except Exception as e:
+            print(f"⚠ trade metrics failed: {e}")
+        if hasattr(strategy, "diagnostics"):
+            try:
+                stats.update(strategy.diagnostics(ind, rebalance_dates))
+            except Exception as e:
+                print(f"⚠ strategy diagnostics failed: {e}")
 
     print("\nPerformance:")
     for k, v in stats.items():
@@ -295,11 +312,17 @@ def main():
         "date_range_start": str(bt_start.date()),
         "date_range_end": str(bt_end.date()),
         "run_id": run_id,
+        "run_label": run_label or None,
+        "bt_params": {k: v for k, v in params.items()},
         "performance": {k: clean(v) for k, v in stats.items()},
     }
     os.makedirs("diagnostic_output", exist_ok=True)
-    with open(f"diagnostic_output/{strategy_id}.json", "w") as f:
+    fname = f"{strategy_id}__{run_label}" if run_label else strategy_id
+    with open(f"diagnostic_output/{fname}.json", "w") as f:
         json.dump(summary, f, indent=2)
+
+    # Machine-readable copy in the job log — survives a failed git push
+    print("##BT_SUMMARY## " + json.dumps(summary, default=str))
 
     print(f"\nDone in {(time.time()-t0)/60:.1f} min")
 
