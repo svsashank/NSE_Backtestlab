@@ -1,0 +1,41 @@
+{
+  "strategy_id": "s03_near_miss_momentum",
+  "strategy_name": "Near-Miss Momentum",
+  "rebalance_freq": "monthly",
+  "date_range_start": "2018-07-02",
+  "date_range_end": "2026-10-01",
+  "run_id": "11a11035-0faa-4e09-a929-90a6e677325a",
+  "run_label": "fh300_mo",
+  "bt_params": {
+    "strategy_id": "s03_near_miss_momentum",
+    "rebalance_type": "monthly",
+    "max_from_high": 0.3,
+    "initial_capital": 1000000,
+    "run_label": "fh300_mo"
+  },
+  "performance": {
+    "cagr": 0.39164679396669766,
+    "total_return": 14.275366637415276,
+    "ann_volatility": 0.2937363635670231,
+    "sharpe": 1.1120407088861004,
+    "max_drawdown": -0.3524580556146084,
+    "win_rate": 0.7272727272727273,
+    "years": 8.24914442162902,
+    "daily_cagr": 0.39164679396669766,
+    "daily_ann_vol": 0.25838071199847384,
+    "daily_sharpe": 1.2642073452008562,
+    "daily_max_drawdown": -0.3964051322521591,
+    "calmar": 0.9879962747746802,
+    "turnover_annual": 8.069232050929378,
+    "n_buys": 934,
+    "n_sells": 919,
+    "whipsaw_reentries": 148,
+    "whipsaw_rate": 0.15845824411134904,
+    "avg_hold_days": 42.50489662676823,
+    "median_hold_days": 31.0,
+    "pct_held_over_1y": 0.0,
+    "tax_paid_total": 2289309.5138111482,
+    "after_tax_cagr": 0.32152522729430966,
+    "tax_drag_cagr": 0.070121566672388
+  }
+}
